@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b83f0"/>
+      <stop offset="1" stop-color="#4fd1a5"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="#0f1116"/>
+  <rect x="14" y="14" width="164" height="164" rx="34" fill="none" stroke="url(#g)" stroke-width="4"/>
+  <text x="96" y="126" font-size="98" font-family="'Noto Sans JP','Hiragino Kaku Gothic ProN','Yu Gothic','Microsoft YaHei',sans-serif"
+        font-weight="700" text-anchor="middle" fill="url(#g)">日</text>
+</svg>
