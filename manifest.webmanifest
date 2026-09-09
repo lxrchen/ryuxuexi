@@ -1,0 +1,15 @@
+{
+  "name": "日语学习站 · 零基础到 N1",
+  "short_name": "日语学习站",
+  "description": "五十音训练、SRS 单词卡、语法库、动词变形训练、学习仪表盘",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1116",
+  "theme_color": "#8b83f0",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
