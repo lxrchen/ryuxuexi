@@ -549,8 +549,8 @@
     };
     let h = hero + '<div class="hero">';
     h += '<h2>今日のミッション</h2><div class="mgrid">';
-    h += '<div class="mcard"><div class="mnum">' + due + '</div><div class="mlab">待复习卡片</div><button class="btn" data-go="vocab" data-vmode="review">开始复习</button></div>';
-    h += '<div class="mcard"><div class="mnum">' + Math.max(0, S.settings.newPerDay - S.today.new) + '</div><div class="mlab">今日新词</div><button class="btn" data-go="vocab" data-vmode="learn">学习新词</button></div>';
+    h += '<div class="mcard"><div class="mnum">' + Math.max(0, S.settings.newPerDay - S.today.new) + '</div><div class="mlab">今日新词</div><button class="btn" data-go="learn">学新词</button></div>';
+    h += '<div class="mcard"><div class="mnum">' + due + '</div><div class="mlab">待复习卡片</div><button class="btn" data-go="review">去复习</button></div>';
     h += '<div class="mcard"><div class="mnum">' + S.drill.r + '</div><div class="mlab">变形正确</div><button class="btn" data-go="drill">变形训练</button></div>';
     h += '</div>';
     h += '<div class="rowbox"><span>目标：<b>' + S.settings.goal + '</b></span>';
@@ -697,45 +697,57 @@
   }
 
   /* ---------- 9. 视图：单词 SRS ---------- */
-  let vs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, mode: "mix" };
-  const VMODES = [["learn", "学新词"], ["review", "复习"], ["mix", "混合"]];
-  function modeCounts() {
-    return { due: dueList(vs.lv).length, "new": newList(vs.lv, 9999).length };
+  // 学习 与 复习 是两套完全独立的状态：各自维护级别、课号范围、队列、进度
+  let ls = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "learn" };
+  let rs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "review" };
+  let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
+  function setStateFor(route) { vs = (route === "review") ? rs : ls; }
+  function modeCounts(st) {
+    return { due: dueList(st.lv).length, "new": newList(st.lv, 9999).length };
   }
   function buildQueue(fresh) {
-    const n = Math.max(0, S.settings.newPerDay - S.today.new);
-    const due = shuffle(dueList(vs.lv));
-    const nw = newList(vs.lv, fresh ? n : Math.min(n, 10));
-    // 学新词：只推没学过的 / 复习：只推已到期待巩固的 / 混合：两者都推
-    let q = vs.mode === "review" ? due : vs.mode === "learn" ? nw : due.concat(nw);
-    if (vs.lesson > 0) q = q.filter(function (v) { return v.l === vs.lesson; });
-    vs.queue = q; vs.idx = 0; vs.show = false;
+    const st = vs;
+    // 复习：只取「学过且到期」的词，与未学词彻底无关
+    // 学习：只取「从没学过」的词
+    if (st.kind === "review") {
+      st.queue = shuffle(dueList(st.lv));
+    } else {
+      const n = Math.max(0, S.settings.newPerDay - S.today.new);
+      st.queue = newList(st.lv, fresh ? n : Math.min(n, 10));
+    }
+    if (st.lesson > 0) st.queue = st.queue.filter(function (v) { return v.l === st.lesson; });
+    st.idx = 0; st.show = false;
   }
-  function viewVocab() {
-    let h = '<h2>单词记忆卡（SRS）</h2>';
-    h += '<div class="chips">模式：';
-    const mc = modeCounts();
-    VMODES.forEach(function (m) {
-      const cnt = m[0] === "review" ? mc.due : m[0] === "learn" ? mc["new"] : (mc.due + mc["new"]);
-      h += '<button class="chip' + (vs.mode === m[0] ? " on" : "") + '" data-vmode="' + m[0] + '">' + m[1] + '（' + cnt + '）</button>';
-    });
-    h += '</div>';
-    h += '<div class="tip2">「学新词」只出没背过的词，「复习」只出学过且到期的词 —— 两者分开，进度互不干扰。</div>';
+  function viewVocab(st, isReview) {
+    let h = '<h2>' + (isReview ? '复习 · 强化已学' : '学新词') + '</h2>';
+    const mc = modeCounts(st);
+    const cnt = isReview ? mc.due : mc["new"];
+    h += '<p class="tip">' + (isReview
+      ? '这里<b>只会出现你已经学过、且到了复习时间的词</b>。没背过的新词不会混进来 —— 想学新词请去「学新词」页。'
+      : '这里<b>只会出现你从没背过的词</b>。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
+    h += '<div class="rowbox"><span>可练：<b>' + cnt + '</b> 个</span>'
+      + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
-      h += '<button class="chip' + (vs.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + '）</button>';
+      h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + '）</button>';
     });
-    h += '</div><div class="chips">范围：<button class="chip' + (vs.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
+    h += '</div><div class="chips">范围：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
     const lessons = [];
-    VOCAB[vs.lv].forEach(function (v) { if (v.l && lessons.indexOf(v.l) < 0) lessons.push(v.l); });
+    VOCAB[st.lv].forEach(function (v) { if (v.l && lessons.indexOf(v.l) < 0) lessons.push(v.l); });
     lessons.sort(function (a, b) { return a - b; }).forEach(function (l) {
-      h += '<button class="chip' + (vs.lesson === l ? " on" : "") + '" data-vl="' + l + '">' + (vs.lv === "N5" || vs.lv === "N4" ? "第" + l + "课" : "主题" + l) + '</button>';
+      h += '<button class="chip' + (st.lesson === l ? " on" : "") + '" data-vl="' + l + '">' + (st.lv === "N5" || st.lv === "N4" ? "第" + l + "课" : "主题" + l) + '</button>';
     });
     h += '</div>';
-    h += '<div class="rowbox"><span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日复习：<b>' + S.today.rev + '</b></span><span>队列剩余：<b>' + Math.max(0, vs.queue.length - vs.idx) + '</b></span><button class="btn sm" id="vbuild">重建队列</button></div>';
+    h += '<div class="rowbox">'
+      + (isReview
+        ? '<span>今日已复习：<b>' + S.today.rev + '</b></span><span>待复习：<b>' + mc.due + '</b></span>'
+        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>未学词：<b>' + mc["new"] + '</b></span>')
+      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重建队列</button></div>';
     h += '<div id="vcard" class="card"></div>';
     return h;
   }
+  function viewLearn() { return viewVocab(ls, false); }
+  function viewReview() { return viewVocab(rs, true); }
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
     if (vs.idx >= vs.queue.length) {
@@ -1273,19 +1285,22 @@
 
   /* ---------- 13. 路由 ---------- */
   const VIEWS = {
-    home: viewHome, kana: viewKana, vocab: viewVocab, grammar: viewGrammar,
+    home: viewHome, kana: viewKana, learn: viewLearn, review: viewReview,
+    vocab: viewLearn,   // 兼容旧链接 → 学新词
+    grammar: viewGrammar,
     drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom,
     dict: viewDict, trans: viewTrans
   };
   function render() {
     const r = (location.hash || "#/home").replace("#/", "");
+    setStateFor(r === "review" ? "review" : "learn");   // 学习与复习各用各的状态
     const fn = VIEWS[r] || VIEWS.home;
     $("#app").innerHTML = fn();
     document.querySelectorAll(".nav a").forEach(function (a) {
       a.classList.toggle("on", a.getAttribute("href") === "#/" + r);
     });
     if (r === "kana") { nextKana(); renderKanaQ(); }
-    if (r === "vocab") { if (!vs.queue.length) buildQueue(false); renderCard(); }
+    if (r === "learn" || r === "review" || r === "vocab") { if (!vs.queue.length) buildQueue(false); renderCard(); }
     if (r === "drill") renderDrill();
     if (r === "dict") { if (!dct.q) nextDict(); renderDict(); }
     if (r === "trans") { if (!trn.q) nextTrans(); renderTrans(); }
@@ -1298,11 +1313,16 @@
     const t = e.target;
     const A = function (n) { return t.getAttribute && t.getAttribute(n); };
     if (A("data-go")) {
-      const vm = A("data-vmode");
-      if (vm) { vs.mode = vm; buildQueue(true); }
-      location.hash = "#/" + A("data-go"); return;
+      const to = A("data-go");
+      // 已在目标页时 hash 不变、不会触发 hashchange，这里手动重建队列并刷新
+      if (location.hash === "#/" + to) {
+        setStateFor(to === "review" ? "review" : "learn");
+        buildQueue(true); render();
+      } else {
+        location.hash = "#/" + to;
+      }
+      return;
     }
-    if (A("data-vmode")) { vs.mode = A("data-vmode"); buildQueue(true); render(); return; }
     if (A("data-kmode")) { kanaState.mode = A("data-kmode"); render(); return; }
     if (A("data-kscope")) { kanaState.scope = A("data-kscope"); nextKana(); render(); return; }
     if (A("data-kans")) { answerKana(A("data-kans")); return; }
@@ -1523,7 +1543,7 @@
         if (b) b.click();
       } else if (k === "Enter") { nextKana(); renderKanaQ(); }
       else if (k === "s" || k === "S") { speak(kanaQ.ex || kanaQ.ans || ""); }
-    } else if (r === "vocab") {
+    } else if (r === "learn" || r === "review" || r === "vocab") {
       if (k === " ") { e.preventDefault(); if (vs.idx < vs.queue.length) { vs.show = !vs.show; renderCard(); } }
       else if (k >= "1" && k <= "4") {
         const b = document.querySelector('#vcard .g[data-g="' + (parseInt(k, 10) - 1) + '"]');
@@ -1710,7 +1730,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
