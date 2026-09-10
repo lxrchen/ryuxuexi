@@ -58,6 +58,8 @@ ${css}
     <a href="#/vocab">单词卡</a>
     <a href="#/grammar">语法库</a>
     <a href="#/drill">变形训练</a>
+    <a href="#/dict">听写</a>
+    <a href="#/trans">翻译</a>
     <a href="#/dash">仪表盘</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>

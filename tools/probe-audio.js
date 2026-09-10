@@ -110,12 +110,9 @@ async function probe(w) {
   const tries = [];
   tries.push({ kanji: w.kanji, kana: w.kana, kanaOnly: false });
   tries.push({ kanji: w.kanji, kana: w.kana, kanaOnly: true });
-  // ます形 → 基本形 再试
-  const mm = global.__MASU__ && global.__MASU__.get(w.kana);
-  if (mm) {
-    tries.push({ kanji: mm.kanji, kana: mm.dict, kanaOnly: false });
-    tries.push({ kanji: mm.kanji, kana: mm.dict, kanaOnly: true });
-  }
+  // 注意：这里**不要**把「ます形」降级成基本形去查。
+  // 词典只收基本形，勉强能命中，但播出来会是「寝る」而卡片上写着「寝ます」——直接误导用户。
+  // ます形词条一律不收录，让前端回落 TTS 读出真正的「ねます」。
   for (const t of tries) {
     const buf = await fetchBuf(urlOf(t.kanji, t.kana, t.kanaOnly));
     if (!buf || buf.length < 1000) continue;

@@ -549,8 +549,8 @@
     };
     let h = hero + '<div class="hero">';
     h += '<h2>今日のミッション</h2><div class="mgrid">';
-    h += '<div class="mcard"><div class="mnum">' + due + '</div><div class="mlab">待复习卡片</div><button class="btn" data-go="vocab">开始复习</button></div>';
-    h += '<div class="mcard"><div class="mnum">' + Math.max(0, S.settings.newPerDay - S.today.new) + '</div><div class="mlab">今日新词</div><button class="btn" data-go="vocab">学习新词</button></div>';
+    h += '<div class="mcard"><div class="mnum">' + due + '</div><div class="mlab">待复习卡片</div><button class="btn" data-go="vocab" data-vmode="review">开始复习</button></div>';
+    h += '<div class="mcard"><div class="mnum">' + Math.max(0, S.settings.newPerDay - S.today.new) + '</div><div class="mlab">今日新词</div><button class="btn" data-go="vocab" data-vmode="learn">学习新词</button></div>';
     h += '<div class="mcard"><div class="mnum">' + S.drill.r + '</div><div class="mlab">变形正确</div><button class="btn" data-go="drill">变形训练</button></div>';
     h += '</div>';
     h += '<div class="rowbox"><span>目标：<b>' + S.settings.goal + '</b></span>';
@@ -697,17 +697,30 @@
   }
 
   /* ---------- 9. 视图：单词 SRS ---------- */
-  let vs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0 };
+  let vs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, mode: "mix" };
+  const VMODES = [["learn", "学新词"], ["review", "复习"], ["mix", "混合"]];
+  function modeCounts() {
+    return { due: dueList(vs.lv).length, "new": newList(vs.lv, 9999).length };
+  }
   function buildQueue(fresh) {
     const n = Math.max(0, S.settings.newPerDay - S.today.new);
-    const d = dueList(vs.lv);
+    const due = shuffle(dueList(vs.lv));
     const nw = newList(vs.lv, fresh ? n : Math.min(n, 10));
-    let q = shuffle(d).concat(nw);
+    // 学新词：只推没学过的 / 复习：只推已到期待巩固的 / 混合：两者都推
+    let q = vs.mode === "review" ? due : vs.mode === "learn" ? nw : due.concat(nw);
     if (vs.lesson > 0) q = q.filter(function (v) { return v.l === vs.lesson; });
     vs.queue = q; vs.idx = 0; vs.show = false;
   }
   function viewVocab() {
     let h = '<h2>单词记忆卡（SRS）</h2>';
+    h += '<div class="chips">模式：';
+    const mc = modeCounts();
+    VMODES.forEach(function (m) {
+      const cnt = m[0] === "review" ? mc.due : m[0] === "learn" ? mc["new"] : (mc.due + mc["new"]);
+      h += '<button class="chip' + (vs.mode === m[0] ? " on" : "") + '" data-vmode="' + m[0] + '">' + m[1] + '（' + cnt + '）</button>';
+    });
+    h += '</div>';
+    h += '<div class="tip2">「学新词」只出没背过的词，「复习」只出学过且到期的词 —— 两者分开，进度互不干扰。</div>';
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
       h += '<button class="chip' + (vs.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + '）</button>';
@@ -990,6 +1003,178 @@
     return h;
   }
 
+  /* ---------- 11c. 视图：听写 / 翻译练习 ---------- */
+  const SCOPES = [["learned", "已学"], ["all", "本级全部"], ["wrong", "错词本"]];
+  let dct = { lv: "N5", scope: "learned", q: null, r: 0, w: 0, revealed: false };
+  let trn = { lv: "N5", dir: "j2c", q: null, opts: [], r: 0, w: 0, picked: -1 };
+
+  function drillPool(scope, lv) {
+    const out = [];
+    LEVELS.forEach(function (L) {
+      if (lv && L !== lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (scope === "learned" && !S.cards[v.id]) return;
+        if (scope === "wrong" && S.wrong.indexOf(v.id) < 0) return;
+        out.push(v);
+      });
+    });
+    return out;
+  }
+  // 答案归一化：去空白、全角转半角、统一小写
+  function normAns(s) {
+    return String(s == null ? "" : s).trim().replace(/\s+/g, "")
+      .replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .toLowerCase();
+  }
+  function matchWord(v, val) {
+    const a = normAns(val);
+    if (!a) return false;
+    return a === normAns(v.k) || (v.w && a === normAns(v.w));
+  }
+  function playWord(v, slow) {
+    if (!v) return;
+    if (slow) {
+      const old = S.settings.ttsRate;
+      S.settings.ttsRate = 0.6;
+      tts(v.k);
+      setTimeout(function () { S.settings.ttsRate = old; }, 900);
+      return;
+    }
+    speak(v.k, { kanji: v.w, kana: v.k });
+  }
+  function rateOf(r, w) { return (r + w) ? Math.round(r / (r + w) * 100) : 0; }
+
+  /* —— 听写 —— */
+  function nextDict() {
+    const pool = drillPool(dct.scope, dct.lv);
+    dct.q = pool.length ? pick(pool) : null;
+    dct.revealed = false;
+  }
+  function viewDict() {
+    let h = '<h2>听写练习</h2>';
+    h += '<p class="tip">听发音写出单词（假名或汉字均可）。建议先用单词卡学完一批再回来，效果最好。</p>';
+    h += '<div class="chips">级别：';
+    LEVELS.forEach(function (L) {
+      h += '<button class="chip' + (dct.lv === L ? " on" : "") + '" data-dtlv="' + L + '">' + L + '</button>';
+    });
+    h += '</div><div class="chips">范围：';
+    SCOPES.forEach(function (s) {
+      h += '<button class="chip' + (dct.scope === s[0] ? " on" : "") + '" data-dtscope="' + s[0] + '">' + s[1] + '</button>';
+    });
+    h += '</div>';
+    h += '<div class="rowbox"><span>正确：<b>' + dct.r + '</b></span><span>错误：<b>' + dct.w + '</b></span><span>正确率：<b>' + rateOf(dct.r, dct.w) + '%</b></span></div>';
+    h += '<div id="dctq" class="qbox"></div>';
+    return h;
+  }
+  function renderDict() {
+    const box = $("#dctq"); if (!box) return;
+    if (!dct.q) { box.innerHTML = '<p class="tip">当前范围没有可练的词，换个级别或选「本级全部」。</p>'; return; }
+    const v = dct.q;
+    const live = hasHuman(v.w, v.k) ? '<span class="badge-live">真人</span>' : '';
+    let h = '<div class="qask">听发音，写出这个单词' + live + '</div>';
+    h += '<div class="chips"><button class="btn" id="dctplay">🔊 播放</button><button class="chip" id="dctslow">慢速</button><button class="chip" id="dctshow">看答案</button></div>';
+    h += '<input id="dctin" class="inp big" placeholder="输入假名或���字" autocomplete="off">';
+    h += '<div class="chips"><button class="btn" id="dctok">提交（Enter）</button><button class="chip" id="dctnext">下一题</button></div>';
+    h += '<div id="dctres" class="res"></div>';
+    if (dct.revealed) {
+      h += '<div class="gex jp"><b>' + esc(v.w || v.k) + '</b>　<span class="rt">' + esc(v.k) + '</span><div class="gtr">' + esc(v.z) + '　' + esc(v.p || '') + '</div></div>';
+    }
+    box.innerHTML = h;
+    playWord(v);
+    const inp = $("#dctin");
+    if (inp) {
+      inp.focus();
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") $("#dctok").click(); });
+    }
+  }
+  function checkDict() {
+    const inp = $("#dctin"); if (!inp || !dct.q) return;
+    const v = dct.q;
+    const ok = matchWord(v, inp.value);
+    dct.r += ok ? 1 : 0; dct.w += ok ? 0 : 1;
+    if (!ok) pushWrong(v.id); else popWrong(v.id);
+    dct.revealed = true;
+    save(); act();
+    let h = '<span class="' + (ok ? "ok" : "no") + '">' + (ok ? "✓ 正确" : "✗ 正确：" + esc(v.w || v.k) + "（" + esc(v.k) + "）") + '</span>';
+    h += '<div class="tip">' + esc(v.z) + '　' + esc(v.p || "") + '</div>';
+    const res = $("#dctres"); if (res) res.innerHTML = h;
+    // 追加答案区，不整体重渲染（避免自动重播一次发音）
+    const box = $("#dctq");
+    if (box && box.querySelector) {
+      const old = box.querySelector(".gex");
+      if (old && old.remove) old.remove();
+    }
+    if (box && box.insertAdjacentHTML) {
+      box.insertAdjacentHTML("beforeend", '<div class="gex jp"><b>' + esc(v.w || v.k) + '</b>　<span class="rt">' + esc(v.k) + '</span><div class="gtr">' + esc(v.z) + '　' + esc(v.p || '') + '</div></div>');
+    }
+  }
+
+  /* —— 翻译 —— */
+  function nextTrans() {
+    const pool = drillPool("all", trn.lv);
+    if (!pool.length) { trn.q = null; return; }
+    trn.q = pick(pool);
+    trn.picked = -1;
+    if (trn.dir === "j2c") {
+      const set = [trn.q.z];
+      let guard = 0;
+      while (set.length < 4 && guard++ < 80) {
+        const c = pick(pool);
+        if (c && c.z && set.indexOf(c.z) < 0) set.push(c.z);
+      }
+      trn.opts = shuffle(set);
+    } else trn.opts = [];
+  }
+  function viewTrans() {
+    let h = '<h2>翻译练习</h2>';
+    h += '<p class="tip">日译中：看日文选中文释义。中译日：看中文写出日文（假名或汉字）。</p>';
+    h += '<div class="chips">级别：';
+    LEVELS.forEach(function (L) {
+      h += '<button class="chip' + (trn.lv === L ? " on" : "") + '" data-trlv="' + L + '">' + L + '</button>';
+    });
+    h += '</div><div class="chips">方向：';
+    h += '<button class="chip' + (trn.dir === "j2c" ? " on" : "") + '" data-trdir="j2c">日 → 中（选择）</button>';
+    h += '<button class="chip' + (trn.dir === "c2j" ? " on" : "") + '" data-trdir="c2j">中 → 日（拼写）</button>';
+    h += '</div>';
+    h += '<div class="rowbox"><span>正确：<b>' + trn.r + '</b></span><span>错误：<b>' + trn.w + '</b></span><span>正确率：<b>' + rateOf(trn.r, trn.w) + '%</b></span></div>';
+    h += '<div id="trq" class="qbox"></div>';
+    return h;
+  }
+  function renderTrans() {
+    const box = $("#trq"); if (!box) return;
+    if (!trn.q) { box.innerHTML = '<p class="tip">该级别暂无词条。</p>'; return; }
+    const v = trn.q;
+    let h = "";
+    if (trn.dir === "j2c") {
+      h += '<div class="qtitle jp">' + esc(v.w || v.k) + '</div>';
+      h += '<div class="qask"><span class="rt">' + esc(v.k) + '</span>　' + esc(v.p || "") + '</div>';
+      h += '<div class="opts">';
+      trn.opts.forEach(function (o, i) {
+        let cls = "opt";
+        if (trn.picked >= 0) {
+          if (o === v.z) cls += " ok";
+          else if (i === trn.picked) cls += " no";
+        }
+        h += '<button class="' + cls + '" data-tropt="' + esc(o) + '">' + esc(o) + '</button>';
+      });
+      h += '</div>';
+      if (trn.picked >= 0) h += '<div class="res"><span class="' + (trn.opts[trn.picked] === v.z ? "ok" : "no") + '">' + (trn.opts[trn.picked] === v.z ? "✓ 正确" : "✗ 正确答案：" + esc(v.z)) + '</span></div>';
+      h += '<div class="chips"><button class="btn" id="trnext">下一题</button><button class="chip" id="trsay">🔊 读一下</button></div>';
+    } else {
+      h += '<div class="qtitle">' + esc(v.z) + '</div>';
+      h += '<div class="qask">写出对应的日文　' + esc(v.p || "") + '</div>';
+      h += '<input id="trin" class="inp big" placeholder="输入假名或汉字" autocomplete="off">';
+      h += '<div class="chips"><button class="btn" id="trok">提交（Enter）</button><button class="chip" id="trshow">看答案</button><button class="chip" id="trnext">下一题</button></div>';
+      h += '<div id="trres" class="res"></div>';
+    }
+    box.innerHTML = h;
+    const inp = $("#trin");
+    if (inp) {
+      inp.focus();
+      inp.addEventListener("keydown", function (e) { if (e.key === "Enter") $("#trok").click(); });
+    }
+  }
+
   /* ---------- 12. 视图：仪表盘 ---------- */
   function viewDash() {
     rollDay();
@@ -1089,7 +1274,8 @@
   /* ---------- 13. 路由 ---------- */
   const VIEWS = {
     home: viewHome, kana: viewKana, vocab: viewVocab, grammar: viewGrammar,
-    drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom
+    drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom,
+    dict: viewDict, trans: viewTrans
   };
   function render() {
     const r = (location.hash || "#/home").replace("#/", "");
@@ -1101,6 +1287,8 @@
     if (r === "kana") { nextKana(); renderKanaQ(); }
     if (r === "vocab") { if (!vs.queue.length) buildQueue(false); renderCard(); }
     if (r === "drill") renderDrill();
+    if (r === "dict") { if (!dct.q) nextDict(); renderDict(); }
+    if (r === "trans") { if (!trn.q) nextTrans(); renderTrans(); }
     if (r === "dash") setTimeout(refreshCacheCount, 0);
     window.scrollTo(0, 0);
   }
@@ -1109,7 +1297,12 @@
   document.addEventListener("click", function (e) {
     const t = e.target;
     const A = function (n) { return t.getAttribute && t.getAttribute(n); };
-    if (A("data-go")) { location.hash = "#/" + A("data-go"); return; }
+    if (A("data-go")) {
+      const vm = A("data-vmode");
+      if (vm) { vs.mode = vm; buildQueue(true); }
+      location.hash = "#/" + A("data-go"); return;
+    }
+    if (A("data-vmode")) { vs.mode = A("data-vmode"); buildQueue(true); render(); return; }
     if (A("data-kmode")) { kanaState.mode = A("data-kmode"); render(); return; }
     if (A("data-kscope")) { kanaState.scope = A("data-kscope"); nextKana(); render(); return; }
     if (A("data-kans")) { answerKana(A("data-kans")); return; }
@@ -1194,6 +1387,55 @@
     if (t.id === "cexport") { exportCustom(); return; }
     if (t.id === "cbulkclear") { const el = $("#cbulk"); if (el) el.value = ""; $("#cpreview").innerHTML = ""; return; }
     if (t.id === "cbulkdo") { doBulkImport(); return; }
+    if (A("data-dtlv")) { dct.lv = A("data-dtlv"); nextDict(); render(); return; }
+    if (A("data-dtscope")) { dct.scope = A("data-dtscope"); nextDict(); render(); return; }
+    if (t.id === "dctplay") { playWord(dct.q); return; }
+    if (t.id === "dctslow") { playWord(dct.q, true); return; }
+    if (t.id === "dctshow") {
+      if (!dct.q) return;
+      dct.revealed = true; dct.w++;
+      const res = $("#dctres");
+      if (res) res.innerHTML = '<span class="no">答案：' + esc(dct.q.w || dct.q.k) + '（' + esc(dct.q.k) + '）</span><div class="tip">' + esc(dct.q.z) + '</div>';
+      const box = $("#dctq");
+      if (box && box.insertAdjacentHTML) {
+        box.insertAdjacentHTML("beforeend", '<div class="gex jp"><b>' + esc(dct.q.w || dct.q.k) + '</b>　<span class="rt">' + esc(dct.q.k) + '</span><div class="gtr">' + esc(dct.q.z) + '</div></div>');
+      }
+      return;
+    }
+    if (t.id === "dctok") { checkDict(); return; }
+    if (t.id === "dctnext") { nextDict(); render(); return; }
+
+    if (A("data-trlv")) { trn.lv = A("data-trlv"); nextTrans(); render(); return; }
+    if (A("data-trdir")) { trn.dir = A("data-trdir"); nextTrans(); render(); return; }
+    if (A("data-tropt")) {
+      if (!trn.q || trn.picked >= 0) return;
+      const sel = A("data-tropt");
+      trn.picked = trn.opts.indexOf(sel);
+      const ok = sel === trn.q.z;
+      trn.r += ok ? 1 : 0; trn.w += ok ? 0 : 1;
+      if (!ok) pushWrong(trn.q.id); else popWrong(trn.q.id);
+      save(); act(); renderTrans(); return;
+    }
+    if (t.id === "trsay") { playWord(trn.q); return; }
+    if (t.id === "trok") {
+      if (!trn.q) return;
+      const inp = $("#trin"); if (!inp) return;
+      const ok = matchWord(trn.q, inp.value);
+      trn.r += ok ? 1 : 0; trn.w += ok ? 0 : 1;
+      if (!ok) pushWrong(trn.q.id); else popWrong(trn.q.id);
+      save(); act();
+      const res = $("#trres");
+      if (res) res.innerHTML = '<span class="' + (ok ? "ok" : "no") + '">' + (ok ? "✓ 正确" : "✗ 正确：" + esc(trn.q.w || trn.q.k) + "（" + esc(trn.q.k) + "）") + '</span><div class="tip">' + esc(trn.q.z) + '</div>';
+      return;
+    }
+    if (t.id === "trshow") {
+      if (!trn.q) return;
+      const res = $("#trres");
+      if (res) res.innerHTML = '<span class="no">答案：' + esc(trn.q.w || trn.q.k) + '（' + esc(trn.q.k) + '）</span>';
+      return;
+    }
+    if (t.id === "trnext") { nextTrans(); render(); return; }
+
     if (t.id === "checkin") { doCheckin(); return; }
     if (t.id === "setgoal") {
       const g = prompt("目标等级（N5/N4/N3/N2/N1）", S.settings.goal);
@@ -1468,7 +1710,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
