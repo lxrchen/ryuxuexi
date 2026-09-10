@@ -701,22 +701,68 @@
   let ls = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "learn" };
   let rs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "review" };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
+  let queueJustSet = false;   // 本次 render 前队列刚被显式设置过（评分/重建/切范围），不要自动重建
   function setStateFor(route) { vs = (route === "review") ? rs : ls; }
   function modeCounts(st) {
     return { due: dueList(st.lv).length, "new": newList(st.lv, 9999).length };
   }
-  function buildQueue(fresh) {
+  function buildQueue(fresh, force) {
     const st = vs;
     // 复习：只取「学过且到期」的词，与未学词彻底无关
     // 学习：只取「从没学过」的词
     if (st.kind === "review") {
       st.queue = shuffle(dueList(st.lv));
     } else {
-      const n = Math.max(0, S.settings.newPerDay - S.today.new);
+      // force = 用户主动「超额再学」，不受每日新词额度限制
+      const n = force ? 10 : Math.max(0, S.settings.newPerDay - S.today.new);
       st.queue = newList(st.lv, fresh ? n : Math.min(n, 10));
     }
     if (st.lesson > 0) st.queue = st.queue.filter(function (v) { return v.l === st.lesson; });
     st.idx = 0; st.show = false;
+  }
+  // 最近一次到期时间与排队数量（用于告知「下次复习」）
+  function nextDueInfo() {
+    let min = Infinity, cnt = 0;
+    const now = Date.now();
+    LEVELS.forEach(function (L) {
+      VOCAB[L].forEach(function (v) {
+        const c = S.cards[v.id];
+        if (c && c.due && c.due > now) { cnt++; if (c.due < min) min = c.due; }
+      });
+    });
+    return { at: min === Infinity ? null : min, cnt: cnt };
+  }
+  function fmtWhen(ts) {
+    const d = new Date(ts), now = new Date(), diff = ts - Date.now();
+    const hh = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    if (diff < 3600000) return "约 " + Math.max(1, Math.round(diff / 60000)) + " 分钟后";
+    if (d.toDateString() === now.toDateString()) return "今天 " + hh;
+    const tm = new Date(now.getTime() + 86400000);
+    if (d.toDateString() === tm.toDateString()) return "明天 " + hh;
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日 " + hh;
+  }
+  // 队列走完时的收尾提示：必须说清「为什么没词了」，否则用户会以为按钮坏了
+  function doneHTML() {
+    if (vs.kind === "review") {
+      if (!Object.keys(S.cards).length) {
+        return '<div class="done">还没有学过任何词<br><span class="tip">先去「学新词」建立第一批，之后这里才会出现复习内容</span><br><button class="btn" data-go="learn">去学新词</button></div>';
+      }
+      const nd = nextDueInfo();
+      if (nd.at) {
+        return '<div class="done">本轮复习完成 🎉<br><span class="tip">当前没有到期的词了 —— 下次复习：<b>' + fmtWhen(nd.at) + '</b>（还有 ' + nd.cnt + ' 个在排）</span><br><button class="btn" data-go="learn">趁现在学新词</button> <button class="chip" id="vbuild2">重新检查</button></div>';
+      }
+      return '<div class="done">当前没有可复习的词<br><span class="tip">已学的词都还没到复习时间</span><br><button class="btn" data-go="learn">去学新词</button></div>';
+    }
+    // 学习页
+    const left = newList(vs.lv, 9999).length;
+    const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
+    if (!left) {
+      return '<div class="done">本级别（' + vs.lv + '）的词已全部学完 🎉<br><span class="tip">换个级别继续，或去复习巩固今天的成果</span><br><button class="btn" data-go="review">去复习</button></div>';
+    }
+    if (!quotaLeft) {
+      return '<div class="done">今日新词额度已用完（' + S.today.new + '/' + S.settings.newPerDay + '）<br><span class="tip">本级别还有 ' + left + ' 个新词没学，想继续可以超额</span><br><button class="btn" id="vforce">超额再学 10 个</button> <button class="chip" data-go="review">去复习</button></div>';
+    }
+    return '<div class="done">本轮完成 🎉<br><span class="tip">本级别还有 ' + left + ' 个新词可学（今日额度剩余 ' + quotaLeft + '）</span><br><button class="btn" id="vbuild2">再来一轮</button></div>';
   }
   function viewVocab(st, isReview) {
     let h = '<h2>' + (isReview ? '复习 · 强化已学' : '学新词') + '</h2>';
@@ -750,10 +796,7 @@
   function viewReview() { return viewVocab(rs, true); }
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
-    if (vs.idx >= vs.queue.length) {
-      box.innerHTML = '<div class="done">本轮完成 🎉<br><button class="btn" id="vbuild2">再来一轮</button></div>';
-      return;
-    }
+    if (vs.idx >= vs.queue.length) { box.innerHTML = doneHTML(); return; }
     const v = vs.queue[vs.idx];
     const c = S.cards[v.id];
     const meta = v.lv + "　" + (v.custom ? "我的词库" : (v.lv === "N5" || v.lv === "N4" ? "第" + v.l + "课" : "主题" + v.l)) + "　" + esc(v.p || "")
@@ -1300,7 +1343,13 @@
       a.classList.toggle("on", a.getAttribute("href") === "#/" + r);
     });
     if (r === "kana") { nextKana(); renderKanaQ(); }
-    if (r === "learn" || r === "review" || r === "vocab") { if (!vs.queue.length) buildQueue(false); renderCard(); }
+    if (r === "learn" || r === "review" || r === "vocab") {
+      // 进入页面时重建队列（跨天、已刷完、队列为空都能拿到最新内容）；
+      // 但评分/手动重建/切换范围触发的 render 不能重建，否则会覆盖刚设好的队列
+      if (!queueJustSet) buildQueue(false);
+      queueJustSet = false;
+      renderCard();
+    }
     if (r === "drill") renderDrill();
     if (r === "dict") { if (!dct.q) nextDict(); renderDict(); }
     if (r === "trans") { if (!trn.q) nextTrans(); renderTrans(); }
@@ -1337,9 +1386,10 @@
     if (t.id === "wclear") { if (confirm("清空错词本？")) { S.wrong = []; save(); render(); } return; }
     if (t.id === "exp") { exportData(); return; }
     if (t.id === "kconf") { showConfuse(); return; }
-    if (A("data-vlv")) { vs.lv = A("data-vlv"); vs.lesson = 0; buildQueue(false); render(); return; }
-    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10); buildQueue(false); render(); return; }
-    if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); render(); return; }
+    if (A("data-vlv")) { vs.lv = A("data-vlv"); vs.lesson = 0; buildQueue(false); queueJustSet = true; render(); return; }
+    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10); buildQueue(false); queueJustSet = true; render(); return; }
+    if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); queueJustSet = true; render(); return; }
+    if (t.id === "vforce") { buildQueue(true, true); queueJustSet = true; render(); return; }
     if (t.id === "vsay") { const v = vs.queue[vs.idx]; if (v) speak(v.k, { kanji: v.w, kana: v.k }); return; }
     if (t.id === "vshow") { vs.show = true; renderCard(); return; }
     if (A("data-g")) {
@@ -1347,7 +1397,7 @@
       review(id, g);
       if (g <= 1) pushWrong(id); else popWrong(id);
       bumpCombo(g >= 2); addXp(g >= 2 ? 10 : 2); syncBadges();
-      vs.idx++; vs.show = false; render(); return;
+      vs.idx++; vs.show = false; queueJustSet = true; render(); return;
     }
     if (A("data-glv")) { gs.lv = A("data-glv"); render(); return; }
     if (A("data-gid")) {
@@ -1730,7 +1780,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
