@@ -292,7 +292,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-10 15:59
+  <br>版本：2026-09-10 16:02
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -3314,6 +3314,19 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       inp.addEventListener("keydown", function (e) { if (e.key === "Enter") $("#dctok").click(); });
     }
   }
+  function answerHTML(v) {
+    return '<div class="gex jp"><b>' + esc(v.w || v.k) + '</b>　<span class="rt">' + esc(v.k) + '</span><div class="gtr">' + esc(v.z) + '　' + esc(v.p || '') + '</div></div>';
+  }
+  // 插入答案块前先清掉所有旧的，保证页面上永远只有一个（原先会越点越多）
+  function insertAnswer(v) {
+    const box = $("#dctq");
+    if (!box) return;
+    if (box.querySelectorAll) {
+      const olds = box.querySelectorAll(".gex");
+      for (let i = 0; i < olds.length; i++) { if (olds[i].remove) olds[i].remove(); }
+    }
+    if (box.insertAdjacentHTML) box.insertAdjacentHTML("beforeend", answerHTML(v));
+  }
   function checkDict() {
     const inp = $("#dctin"); if (!inp || !dct.q) return;
     const v = dct.q;
@@ -3325,15 +3338,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     let h = '<span class="' + (ok ? "ok" : "no") + '">' + (ok ? "✓ 正确" : "✗ 正确：" + esc(v.w || v.k) + "（" + esc(v.k) + "）") + '</span>';
     h += '<div class="tip">' + esc(v.z) + '　' + esc(v.p || "") + '</div>';
     const res = $("#dctres"); if (res) res.innerHTML = h;
-    // 追加答案区，不整体重渲染（避免自动重播一次发音）
-    const box = $("#dctq");
-    if (box && box.querySelector) {
-      const old = box.querySelector(".gex");
-      if (old && old.remove) old.remove();
-    }
-    if (box && box.insertAdjacentHTML) {
-      box.insertAdjacentHTML("beforeend", '<div class="gex jp"><b>' + esc(v.w || v.k) + '</b>　<span class="rt">' + esc(v.k) + '</span><div class="gtr">' + esc(v.z) + '　' + esc(v.p || '') + '</div></div>');
-    }
+    insertAnswer(v);
   }
 
   /* —— 翻译 —— */
@@ -3634,14 +3639,11 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (t.id === "dctplay") { playWord(dct.q); return; }
     if (t.id === "dctslow") { playWord(dct.q, true); return; }
     if (t.id === "dctshow") {
-      if (!dct.q) return;
+      if (!dct.q || dct.revealed) return;   // 已揭示过就不再重复（原先会一直往下追加答案）
       dct.revealed = true; dct.w++;
       const res = $("#dctres");
-      if (res) res.innerHTML = '<span class="no">答案：' + esc(dct.q.w || dct.q.k) + '（' + esc(dct.q.k) + '）</span><div class="tip">' + esc(dct.q.z) + '</div>';
-      const box = $("#dctq");
-      if (box && box.insertAdjacentHTML) {
-        box.insertAdjacentHTML("beforeend", '<div class="gex jp"><b>' + esc(dct.q.w || dct.q.k) + '</b>　<span class="rt">' + esc(dct.q.k) + '</span><div class="gtr">' + esc(dct.q.z) + '</div></div>');
-      }
+      if (res) res.innerHTML = '<span class="no">答案：' + esc(dct.q.w || dct.q.k) + '（' + esc(dct.q.k) + '）</span><div class="tip">' + esc(dct.q.z) + '　' + esc(dct.q.p || '') + '</div>';
+      insertAnswer(dct.q);
       return;
     }
     if (t.id === "dctok") { checkDict(); return; }
@@ -3952,7 +3954,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
