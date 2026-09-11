@@ -207,11 +207,14 @@
     });
     return out;
   }
-  function newList(lv, n) {
+  function newList(lv, n, lesson) {
     const out = [];
     LEVELS.forEach(function (L) {
       if (lv && L !== lv) return;
-      VOCAB[L].forEach(function (v) { if (!S.cards[v.id]) out.push(v); });
+      VOCAB[L].forEach(function (v) {
+        if (lesson && v.l !== lesson) return;   // 先按课号过滤，再取数量（反过来会导致选课后抽不到词）
+        if (!S.cards[v.id]) out.push(v);
+      });
     });
     return shuffle(out).slice(0, n);
   }
@@ -712,12 +715,12 @@
     // 学习：只取「从没学过」的词
     if (st.kind === "review") {
       st.queue = shuffle(dueList(st.lv));
+      if (st.lesson > 0) st.queue = st.queue.filter(function (v) { return v.l === st.lesson; });
     } else {
-      // force = 用户主动「超额再学」，不受每日新词额度限制
-      const n = force ? 10 : Math.max(0, S.settings.newPerDay - S.today.new);
-      st.queue = newList(st.lv, fresh ? n : Math.min(n, 10));
+      // 每轮最多 10 个，避免一次给太多；force = 用户主动「超额再学」，忽略每日额度
+      const quota = force ? 10 : Math.max(0, S.settings.newPerDay - S.today.new);
+      st.queue = newList(st.lv, Math.min(quota, 10), st.lesson);
     }
-    if (st.lesson > 0) st.queue = st.queue.filter(function (v) { return v.l === st.lesson; });
     st.idx = 0; st.show = false;
   }
   // 最近一次到期时间与排队数量（用于告知「下次复习」）
@@ -754,7 +757,7 @@
       return '<div class="done">当前没有可复习的词<br><span class="tip">已学的词都还没到复习时间</span><br><button class="btn" data-go="learn">去学新词</button></div>';
     }
     // 学习页
-    const left = newList(vs.lv, 9999).length;
+    const left = newList(vs.lv, 9999, vs.lesson).length;
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
     if (!left) {
       return '<div class="done">本级别（' + vs.lv + '）的词已全部学完 🎉<br><span class="tip">换个级别继续，或去复习巩固今天的成果</span><br><button class="btn" data-go="review">去复习</button></div>';
@@ -784,13 +787,33 @@
       h += '<button class="chip' + (st.lesson === l ? " on" : "") + '" data-vl="' + l + '">' + (st.lv === "N5" || st.lv === "N4" ? "第" + l + "课" : "主题" + l) + '</button>';
     });
     h += '</div>';
+    const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
     h += '<div class="rowbox">'
       + (isReview
-        ? '<span>今日已复习：<b>' + S.today.rev + '</b></span><span>待复习：<b>' + mc.due + '</b></span>'
-        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>未学词：<b>' + mc["new"] + '</b></span>')
-      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重建队列</button></div>';
+        ? '<span>今日已复习：<b>' + S.today.rev + '</b></span><span>到期待复习：<b>' + mc.due + '</b></span>'
+        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日额度剩余：<b>' + quotaLeft + '</b></span><span>未学词：<b>' + mc["new"] + '</b></span>')
+      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重抽本轮</button></div>';
+    h += queueNote(st, mc, quotaLeft);
     h += '<div id="vcard" class="card"></div>';
     return h;
+  }
+  // 说明「为什么本轮只有这么几个词」——否则用户会以为重抽功能坏了
+  function queueNote(st, mc, quotaLeft) {
+    if (!st.queue.length) return "";   // 空队列的情况由 doneHTML 说明
+    const scope = st.lesson > 0 ? "（已按课号筛选）" : "";
+    if (st.kind === "review") {
+      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个到期词' + scope
+        + ' —— 这就是当前<b>所有</b>「已学过且到期」的词，走完就没有了；没背过的新词不会出现在这里。</div>';
+    }
+    if (st.lesson > 0) {
+      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个新词' + scope + '。</div>';
+    }
+    if (quotaLeft < 10) {
+      return '<div class="tip2">本轮只有 <b>' + st.queue.length + '</b> 个 —— 因为<b>今日新词额度只剩 ' + quotaLeft + ' 个</b>'
+        + '（每日额度 ' + S.settings.newPerDay + ' 个，可在「仪表盘 → 每日新词」调整）。'
+        + '本级别还有 ' + mc["new"] + ' 个新词没学：<button class="chip sm" id="vforce2">超额再学 10 个</button></div>';
+    }
+    return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个新词（都是你还没背过的）。</div>';
   }
   function viewLearn() { return viewVocab(ls, false); }
   function viewReview() { return viewVocab(rs, true); }
@@ -1394,7 +1417,7 @@
     if (A("data-vlv")) { vs.lv = A("data-vlv"); vs.lesson = 0; buildQueue(false); queueJustSet = true; render(); return; }
     if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10); buildQueue(false); queueJustSet = true; render(); return; }
     if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); queueJustSet = true; render(); return; }
-    if (t.id === "vforce") { buildQueue(true, true); queueJustSet = true; render(); return; }
+    if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); queueJustSet = true; render(); return; }
     if (t.id === "vsay") { const v = vs.queue[vs.idx]; if (v) speak(v.k, { kanji: v.w, kana: v.k }); return; }
     if (t.id === "vshow") { vs.show = true; renderCard(); return; }
     if (A("data-g")) {
@@ -1782,7 +1805,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
