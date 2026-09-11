@@ -20,6 +20,7 @@ const files = [
   "js/data/vocab-n1.js",
   "js/data/verbs.js",
   "js/data/grammar.js",
+  "js/data/reading.js",
   "js/data/audio-map.js",
   "js/app.js"
 ];
@@ -61,6 +62,7 @@ ${css}
     <a href="#/drill">变形训练</a>
     <a href="#/dict">听写</a>
     <a href="#/trans">翻译</a>
+    <a href="#/read">文章精读</a>
     <a href="#/dash">仪表盘</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>

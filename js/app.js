@@ -37,6 +37,7 @@
   const KANA = globalThis.KANA || [];
   const CONFUSE = globalThis.KANA_CONFUSE || [];
   const ROWS = globalThis.KANA_ROWS || [];
+  const READING = globalThis.READING || [];
 
   /* ---------- 2. 状态持久化 ---------- */
   const KEY = "jp_studio_v1";
@@ -54,7 +55,8 @@
     best: 0,           // 最高连击
     wrong: [],         // 错词本（单词 id 列表）
     badges: {},        // 成就
-    custom: { vocab: [], grammar: [] }   // 用户自定义词库 / 语法
+    custom: { vocab: [], grammar: [] },  // 用户自定义词库 / 语法
+    reading: {}        // 文章精读进度: id -> { blank:{r,w}, quiz:{r,w}, at }
   };
   let S = (function () {
     try { const r = JSON.parse(localStorage.getItem(KEY)); if (r) return Object.assign({}, DEF, r); }
@@ -1258,6 +1260,180 @@
     }
   }
 
+  /* ---------- 11d. 视图：文章精读 ---------- */
+  let rd = {
+    lv: "N5", cur: null, stage: "read", showK: true, showZ: false,
+    bi: 0, br: 0, bw: 0, rev: false,        // 填空
+    qi: 0, qr: 0, qw: 0, pick: -1           // 理解题
+  };
+  function blanksOf(art) {
+    const out = [];
+    art.s.forEach(function (s, i) { if (s.b) out.push(i); });
+    return out;
+  }
+  function matchBlank(b, val) {
+    const v = normAns(val);
+    if (!v) return false;
+    return v === normAns(b.a) || v === normAns(b.k);
+  }
+  function saveReadResult(a) {
+    if (!S.reading) S.reading = {};
+    S.reading[a.id] = { blank: { r: rd.br, w: rd.bw }, quiz: { r: rd.qr, w: rd.qw }, at: Date.now() };
+    save();
+  }
+  function saySentence(a, i) {
+    const s = a.s[i];
+    if (s) tts(s.j);
+  }
+  // 通读全文：逐句朗读，按字数估算间隔
+  let readingTimer = null;
+  function playAll(a) {
+    if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; return; }
+    let i = 0;
+    const step = function () {
+      if (i >= a.s.length) { readingTimer = null; return; }
+      tts(a.s[i].j);
+      const dur = Math.max(1600, a.s[i].j.length * 280 + 700);
+      i++;
+      readingTimer = setTimeout(step, dur);
+    };
+    step();
+  }
+  function bindReadInput() {
+    const inp = $("#rdin");
+    if (inp) {
+      inp.focus();
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { const b = $("#rdok"); if (b) b.click(); }
+      });
+    }
+  }
+  function viewRead() {
+    return rd.cur ? readArticleHTML() : readListHTML();
+  }
+  function readListHTML() {
+    let h = '<h2>文章精读</h2>';
+    h += '<p class="tip">把背过的单词和语法放进短文里真正用一遍。可以逐句听发音、随时对照中文，再做<b>填空</b>（练语法结构与搭配）和<b>理解题</b>（检验读懂了没有）。</p>';
+    h += '<div class="chips">级别：';
+    LEVELS.forEach(function (L) {
+      const n = READING.filter(function (a) { return a.lv === L; }).length;
+      h += '<button class="chip' + (rd.lv === L ? " on" : "") + '" data-rdlv="' + L + '">' + L + '（' + n + '）</button>';
+    });
+    h += '</div>';
+    const list = READING.filter(function (a) { return a.lv === rd.lv; });
+    if (!list.length) {
+      h += '<p class="tip">该级别暂时还没有文章。目前 N5 / N4 各有若干篇，更高等级在陆续补充。</p>';
+      return h;
+    }
+    h += '<div class="glist">';
+    list.forEach(function (a) {
+      const st = S.reading && S.reading[a.id];
+      const bn = blanksOf(a).length;
+      h += '<div class="gitem"><div class="ghead rdopen" data-rdopen="' + a.id + '">'
+        + '<span class="gname jp">' + esc(a.t) + '</span>'
+        + '<span class="gmean">' + esc(a.zh) + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
+        + (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>')
+        + '</div></div>';
+    });
+    h += '</div>';
+    return h;
+  }
+  function readArticleHTML() {
+    const a = rd.cur;
+    let h = '<h2>' + esc(a.t) + '　<span class="rt">' + esc(a.zh) + '</span></h2>';
+    h += '<div class="chips">';
+    h += '<button class="chip" data-rdback="1">← 文章列表</button>';
+    h += '<button class="chip' + (rd.stage === "read" ? " on" : "") + '" data-rdstage="read">阅读</button>';
+    h += '<button class="chip' + (rd.stage === "blank" ? " on" : "") + '" data-rdstage="blank">填空练习</button>';
+    h += '<button class="chip' + (rd.stage === "quiz" ? " on" : "") + '" data-rdstage="quiz">理解题</button>';
+    h += '</div>';
+    if (rd.stage === "read") h += readStageHTML(a);
+    else if (rd.stage === "blank") h += blankStageHTML(a);
+    else h += quizStageHTML(a);
+    return h;
+  }
+  function readStageHTML(a) {
+    let h = '<div class="chips">';
+    h += '<button class="chip' + (rd.showK ? " on" : "") + '" id="rdk">显示假名</button>';
+    h += '<button class="chip' + (rd.showZ ? " on" : "") + '" id="rdz">显示中文</button>';
+    h += '<button class="chip" id="rdplayall">通读全文</button>';
+    h += '</div><div class="rart">';
+    a.s.forEach(function (s, i) {
+      h += '<div class="rline">';
+      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">' + (i + 1) + '</button>';
+      h += '<div class="rbody">';
+      h += '<div class="rj jp">' + esc(s.j) + '</div>';
+      if (rd.showK) h += '<div class="rk">' + esc(s.k) + '</div>';
+      if (rd.showZ) h += '<div class="rz">' + esc(s.z) + '</div>';
+      if (s.g) h += '<div class="rgtags">' + esc(s.g) + '</div>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+    const bn = blanksOf(a).length;
+    h += '<div class="chips"><button class="btn" data-rdstage="blank">开始填空练习（' + bn + ' 空）</button>'
+      + '<button class="chip" data-rdstage="quiz">直接做理解题</button></div>';
+    h += '<p class="tip">点左边的序号可以朗读该句。假名和中文可以随时关掉，先自己读懂再打开对照。</p>';
+    return h;
+  }
+  function blankStageHTML(a) {
+    const bs = blanksOf(a);
+    if (!bs.length) return '<p class="tip">这篇文章没有设置填空。</p>';
+    if (rd.bi >= bs.length) {
+      saveReadResult(a);
+      return '<div class="done">填空完成 🎉<br><span class="tip">正确 <b>' + rd.br + '</b> / ' + (rd.br + rd.bw)
+        + '（' + rateOf(rd.br, rd.bw) + '%）</span><br>'
+        + '<button class="btn" data-rdstage="quiz">继续做理解题</button> '
+        + '<button class="chip" data-rdrestart="1">再做一遍</button></div>';
+    }
+    const s = a.s[bs[rd.bi]];
+    const qj = s.j.split(s.b.a).join('<b class="blank">____</b>');
+    const qk = s.k.split(s.b.k).join('____');
+    let h = '<div class="rowbox"><span>第 <b>' + (rd.bi + 1) + '</b> / ' + bs.length + ' 空</span>'
+      + '<span>正确 <b>' + rd.br + '</b></span><span>错误 <b>' + rd.bw + '</b></span>'
+      + '<button class="btn sm" id="rdplaycur">🔊 听这句</button></div>';
+    h += '<div class="qbox">';
+    h += '<div class="qask">填入合适的词　<span class="tip2">' + esc(s.b.h || "") + '</span></div>';
+    h += '<div class="rblank jp">' + qj + '</div>';
+    h += '<div class="rk">' + esc(qk) + '</div>';
+    h += '<input id="rdin" class="inp big" placeholder="输入答案（假名或汉字都可以）" autocomplete="off">';
+    h += '<div class="chips"><button class="btn" id="rdok">提交（Enter）</button>'
+      + '<button class="chip" id="rdshow">看答案</button>'
+      + '<button class="chip" id="rdskip">跳过这空</button></div>';
+    h += '<div id="rdres" class="res"></div>';
+    h += '</div>';
+    return h;
+  }
+  function quizStageHTML(a) {
+    if (!a.q.length) return '<p class="tip">这篇文章没有理解题。</p>';
+    if (rd.qi >= a.q.length) {
+      saveReadResult(a);
+      return '<div class="done">理解题完成 🎉<br><span class="tip">正确 <b>' + rd.qr + '</b> / ' + (rd.qr + rd.qw)
+        + '（' + rateOf(rd.qr, rd.qw) + '%）</span><br>'
+        + '<button class="chip" data-rdrestart="1">重做本篇</button> '
+        + '<button class="btn" data-rdback="1">返回文章列表</button></div>';
+    }
+    const q = a.q[rd.qi];
+    let h = '<div class="rowbox"><span>第 <b>' + (rd.qi + 1) + '</b> / ' + a.q.length + ' 题</span>'
+      + '<button class="chip sm" data-rdstage="read">回看文章</button></div>';
+    h += '<div class="qbox">';
+    h += '<div class="qask jp" style="font-size:17px">' + esc(q.q) + '</div>';
+    h += '<div class="opts">';
+    q.o.forEach(function (o, i) {
+      let cls = "opt";
+      if (rd.pick >= 0) { if (i === q.a) cls += " ok"; else if (i === rd.pick) cls += " no"; }
+      h += '<button class="' + cls + '" data-rdopt="' + i + '">' + esc(o) + '</button>';
+    });
+    h += '</div>';
+    if (rd.pick >= 0) {
+      h += '<div class="res"><span class="' + (rd.pick === q.a ? "ok" : "no") + '">'
+        + (rd.pick === q.a ? "✓ 正确" : "✗ 正确答案：" + esc(q.o[q.a])) + '</span>'
+        + '<div class="tip">' + esc(q.z) + '</div></div>';
+      h += '<div class="chips"><button class="btn" id="rdnextq">下一题</button></div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
   /* ---------- 12. 视图：仪表盘 ---------- */
   function viewDash() {
     rollDay();
@@ -1360,7 +1536,7 @@
     vocab: viewLearn,   // 兼容旧链接 → 学新词
     grammar: viewGrammar,
     drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom,
-    dict: viewDict, trans: viewTrans
+    dict: viewDict, trans: viewTrans, read: viewRead
   };
   function render() {
     const r = (location.hash || "#/home").replace("#/", "");
@@ -1381,6 +1557,10 @@
     if (r === "drill") renderDrill();
     if (r === "dict") { if (!dct.q) nextDict(); renderDict(); }
     if (r === "trans") { if (!trn.q) nextTrans(); renderTrans(); }
+    if (r === "read") {
+      if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; }
+      bindReadInput();
+    }
     if (r === "dash") setTimeout(refreshCacheCount, 0);
     window.scrollTo(0, 0);
   }
@@ -1530,6 +1710,72 @@
       return;
     }
     if (t.id === "trnext") { nextTrans(); render(); return; }
+
+    if (A("data-rdlv")) { rd.lv = A("data-rdlv"); render(); return; }
+    if (A("data-rdopen")) {
+      const id = A("data-rdopen");
+      rd.cur = READING.filter(function (a) { return a.id === id; })[0] || null;
+      rd.stage = "read"; rd.bi = 0; rd.br = 0; rd.bw = 0; rd.qi = 0; rd.qr = 0; rd.qw = 0; rd.pick = -1; rd.rev = false;
+      render(); return;
+    }
+    if (A("data-rdback")) { rd.cur = null; render(); return; }
+    if (A("data-rdstage")) {
+      rd.stage = A("data-rdstage");
+      if (rd.stage === "blank") { rd.bi = 0; rd.br = 0; rd.bw = 0; rd.rev = false; }
+      if (rd.stage === "quiz") { rd.qi = 0; rd.qr = 0; rd.qw = 0; rd.pick = -1; }
+      render(); return;
+    }
+    if (t.id === "rdk") { rd.showK = !rd.showK; render(); return; }
+    if (t.id === "rdz") { rd.showZ = !rd.showZ; render(); return; }
+    if (A("data-rsay")) { if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10)); return; }
+    if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
+    if (t.id === "rdplaycur") {
+      if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi]); }
+      return;
+    }
+    if (t.id === "rdrestart") {
+      rd.stage = "read"; rd.bi = 0; rd.br = 0; rd.bw = 0; rd.rev = false;
+      rd.qi = 0; rd.qr = 0; rd.qw = 0; rd.pick = -1; render(); return;
+    }
+    if (t.id === "rdok") {
+      if (!rd.cur) return;
+      const inp = $("#rdin"); if (!inp) return;
+      const bs = blanksOf(rd.cur), s = rd.cur.s[bs[rd.bi]];
+      const ok = matchBlank(s.b, inp.value);
+      rd.br += ok ? 1 : 0; rd.bw += ok ? 0 : 1; rd.rev = true;
+      const res = $("#rdres");
+      if (res) {
+        res.innerHTML = '<span class="' + (ok ? "ok" : "no") + '">'
+          + (ok ? "✓ 正确" : "✗ 正确答案：" + esc(s.b.a)) + '</span>'
+          + '<div class="tip">' + esc(s.j) + '<br>' + esc(s.z) + (s.g ? '<br>语法：' + esc(s.g) : '') + '</div>'
+          + '<button class="btn" id="rdblanknext">下一空</button>';
+      }
+      return;
+    }
+    if (t.id === "rdblanknext" || t.id === "rdskip") {
+      rd.bi++; rd.rev = false; render(); return;
+    }
+    if (t.id === "rdshow") {
+      if (!rd.cur) return;
+      const bs = blanksOf(rd.cur), s = rd.cur.s[bs[rd.bi]];
+      rd.bw++; rd.rev = true;
+      const res = $("#rdres");
+      if (res) {
+        res.innerHTML = '<span class="no">答案：' + esc(s.b.a) + '（' + esc(s.b.k) + '）</span>'
+          + '<div class="tip">' + esc(s.j) + '<br>' + esc(s.z) + (s.g ? '<br>语法：' + esc(s.g) : '') + '</div>'
+          + '<button class="btn" id="rdblanknext">下一空</button>';
+      }
+      return;
+    }
+    if (A("data-rdopt")) {
+      if (!rd.cur || rd.pick >= 0) return;
+      const i = parseInt(A("data-rdopt"), 10);
+      const q = rd.cur.q[rd.qi];
+      rd.pick = i;
+      if (i === q.a) { rd.qr++; addXp(5); } else rd.qw++;
+      act(); render(); return;
+    }
+    if (t.id === "rdnextq") { rd.qi++; rd.pick = -1; render(); return; }
 
     if (t.id === "checkin") { doCheckin(); return; }
     if (t.id === "setgoal") {
@@ -1805,7 +2051,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();

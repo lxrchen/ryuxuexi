@@ -241,6 +241,23 @@ textarea.inp.big2{width:100%;font-family:ui-monospace,Consolas,monospace;font-si
 .gtr{font-size:12.5px;color:var(--tx3);margin-top:4px}
 code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 
+/* 文章精读 */
+.rdopen{cursor:pointer}
+.rdopen:hover{background:rgba(139,131,240,.07)}
+.rart{margin:14px 0}
+.rline{display:flex;gap:12px;align-items:flex-start;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.rsay{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
+  color:var(--tx3);font-size:12px;cursor:pointer;transition:.15s;font-family:inherit}
+.rsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
+.rbody{flex:1;min-width:0}
+.rj{font-size:17px;line-height:1.9;color:var(--tx);font-family:var(--jp)}
+.rk{font-size:12.5px;line-height:1.8;color:var(--tx3);margin-top:3px}
+.rz{font-size:13px;line-height:1.8;color:var(--tx2);margin-top:5px;padding-left:9px;border-left:2px solid var(--bd2)}
+.rgtags{font-size:11.5px;color:var(--ac2);margin-top:6px;letter-spacing:.2px}
+.rblank{font-size:19px;line-height:2;color:var(--tx);font-family:var(--jp);margin:12px 0}
+.rblank .blank{color:var(--warn);border-bottom:2px solid var(--warn);padding:0 14px}
+
 @media(max-width:640px){
   .audioset .alab{min-width:64px}
   .audioset select{max-width:100%}
