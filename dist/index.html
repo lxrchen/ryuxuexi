@@ -254,14 +254,17 @@ textarea.inp.big2{width:100%;font-family:ui-monospace,Consolas,monospace;font-si
 code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 
 /* 文章精读 */
-.rdopen{cursor:pointer}
-.rdopen:hover{background:rgba(139,131,240,.07)}
+.rdopen{cursor:pointer;-webkit-user-select:none;user-select:none}
+.rdopen:hover{border-color:var(--ac2)}
 .rart{margin:14px 0}
 .rline{display:flex;gap:12px;align-items:flex-start;background:var(--bg2);border:1px solid var(--bd);
   border-radius:12px;padding:14px 16px;margin-bottom:10px}
-.rsay{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
-  color:var(--tx3);font-size:12px;cursor:pointer;transition:.15s;font-family:inherit}
+.rside{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px}
+.rnum{font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.rsay{width:34px;height:34px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
+  color:var(--tx2);font-size:15px;cursor:pointer;transition:.15s;line-height:1;padding:0}
 .rsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
+.rsay.playing{background:linear-gradient(135deg,var(--ac2),#3fb98f);border-color:transparent;color:#fff}
 .rbody{flex:1;min-width:0}
 .rj{font-size:17px;line-height:1.9;color:var(--tx);font-family:var(--jp)}
 .rk{font-size:12.5px;line-height:1.8;color:var(--tx3);margin-top:3px}
@@ -310,7 +313,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-11 10:28
+  <br>版本：2026-09-11 10:38
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -3761,7 +3764,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     list.forEach(function (a) {
       const st = S.reading && S.reading[a.id];
       const bn = blanksOf(a).length;
-      h += '<div class="gitem"><div class="ghead rdopen" data-rdopen="' + a.id + '">'
+      h += '<div class="gitem rdopen" data-rdopen="' + a.id + '"><div class="ghead">'
         + '<span class="gname jp">' + esc(a.t) + '</span>'
         + '<span class="gmean">' + esc(a.zh) + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
         + (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>')
@@ -3792,7 +3795,10 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     h += '</div><div class="rart">';
     a.s.forEach(function (s, i) {
       h += '<div class="rline">';
-      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">' + (i + 1) + '</button>';
+      h += '<div class="rside">';
+      h += '<span class="rnum">' + (i + 1) + '</span>';
+      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">🔊</button>';
+      h += '</div>';
       h += '<div class="rbody">';
       h += '<div class="rj jp">' + esc(s.j) + '</div>';
       if (rd.showK) h += '<div class="rk">' + esc(s.k) + '</div>';
@@ -3999,8 +4005,17 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
 
   /* ---------- 14. 事件委托 ---------- */
   document.addEventListener("click", function (e) {
-    const t = e.target;
-    const A = function (n) { return t.getAttribute && t.getAttribute(n); };
+    let t = e.target;
+    // 点在按钮内部的 <span>/<kbd> 上时，把目标上溯到按钮本身，否则取不到它的 id
+    if (t && !t.id && t.closest) { const b = t.closest("button"); if (b) t = b; }
+    // 点击的可能是不带该属性的子元素（如标题里的 <span>、按钮里的 <kbd>），
+    // 因此要沿祖先链向上找最近的持有者，否则「点文字没反应、点空白才有反应」
+    const A = function (n) {
+      if (!t) return null;
+      if (t.getAttribute && t.getAttribute(n)) return t.getAttribute(n);
+      const el = t.closest ? t.closest("[" + n + "]") : null;
+      return el ? el.getAttribute(n) : null;
+    };
     if (A("data-go")) {
       const to = A("data-go");
       // 已在目标页时 hash 不变、不会触发 hashchange，这里手动重建队列并刷新
@@ -4159,7 +4174,14 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     }
     if (t.id === "rdk") { rd.showK = !rd.showK; render(); return; }
     if (t.id === "rdz") { rd.showZ = !rd.showZ; render(); return; }
-    if (A("data-rsay")) { if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10)); return; }
+    if (A("data-rsay")) {
+      if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10));
+      if (t.classList) {
+        t.classList.add("playing");
+        setTimeout(function () { if (t.classList) t.classList.remove("playing"); }, 900);
+      }
+      return;
+    }
     if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
     if (t.id === "rdplaycur") {
       if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi]); }

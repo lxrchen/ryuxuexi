@@ -1329,7 +1329,7 @@
     list.forEach(function (a) {
       const st = S.reading && S.reading[a.id];
       const bn = blanksOf(a).length;
-      h += '<div class="gitem"><div class="ghead rdopen" data-rdopen="' + a.id + '">'
+      h += '<div class="gitem rdopen" data-rdopen="' + a.id + '"><div class="ghead">'
         + '<span class="gname jp">' + esc(a.t) + '</span>'
         + '<span class="gmean">' + esc(a.zh) + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
         + (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>')
@@ -1360,7 +1360,10 @@
     h += '</div><div class="rart">';
     a.s.forEach(function (s, i) {
       h += '<div class="rline">';
-      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">' + (i + 1) + '</button>';
+      h += '<div class="rside">';
+      h += '<span class="rnum">' + (i + 1) + '</span>';
+      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">🔊</button>';
+      h += '</div>';
       h += '<div class="rbody">';
       h += '<div class="rj jp">' + esc(s.j) + '</div>';
       if (rd.showK) h += '<div class="rk">' + esc(s.k) + '</div>';
@@ -1567,8 +1570,17 @@
 
   /* ---------- 14. 事件委托 ---------- */
   document.addEventListener("click", function (e) {
-    const t = e.target;
-    const A = function (n) { return t.getAttribute && t.getAttribute(n); };
+    let t = e.target;
+    // 点在按钮内部的 <span>/<kbd> 上时，把目标上溯到按钮本身，否则取不到它的 id
+    if (t && !t.id && t.closest) { const b = t.closest("button"); if (b) t = b; }
+    // 点击的可能是不带该属性的子元素（如标题里的 <span>、按钮里的 <kbd>），
+    // 因此要沿祖先链向上找最近的持有者，否则「点文字没反应、点空白才有反应」
+    const A = function (n) {
+      if (!t) return null;
+      if (t.getAttribute && t.getAttribute(n)) return t.getAttribute(n);
+      const el = t.closest ? t.closest("[" + n + "]") : null;
+      return el ? el.getAttribute(n) : null;
+    };
     if (A("data-go")) {
       const to = A("data-go");
       // 已在目标页时 hash 不变、不会触发 hashchange，这里手动重建队列并刷新
@@ -1727,7 +1739,14 @@
     }
     if (t.id === "rdk") { rd.showK = !rd.showK; render(); return; }
     if (t.id === "rdz") { rd.showZ = !rd.showZ; render(); return; }
-    if (A("data-rsay")) { if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10)); return; }
+    if (A("data-rsay")) {
+      if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10));
+      if (t.classList) {
+        t.classList.add("playing");
+        setTimeout(function () { if (t.classList) t.classList.remove("playing"); }, 900);
+      }
+      return;
+    }
     if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
     if (t.id === "rdplaycur") {
       if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi]); }

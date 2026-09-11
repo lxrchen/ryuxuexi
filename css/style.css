@@ -242,14 +242,17 @@ textarea.inp.big2{width:100%;font-family:ui-monospace,Consolas,monospace;font-si
 code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 
 /* 文章精读 */
-.rdopen{cursor:pointer}
-.rdopen:hover{background:rgba(139,131,240,.07)}
+.rdopen{cursor:pointer;-webkit-user-select:none;user-select:none}
+.rdopen:hover{border-color:var(--ac2)}
 .rart{margin:14px 0}
 .rline{display:flex;gap:12px;align-items:flex-start;background:var(--bg2);border:1px solid var(--bd);
   border-radius:12px;padding:14px 16px;margin-bottom:10px}
-.rsay{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
-  color:var(--tx3);font-size:12px;cursor:pointer;transition:.15s;font-family:inherit}
+.rside{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px}
+.rnum{font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.rsay{width:34px;height:34px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
+  color:var(--tx2);font-size:15px;cursor:pointer;transition:.15s;line-height:1;padding:0}
 .rsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
+.rsay.playing{background:linear-gradient(135deg,var(--ac2),#3fb98f);border-color:transparent;color:#fff}
 .rbody{flex:1;min-width:0}
 .rj{font-size:17px;line-height:1.9;color:var(--tx);font-family:var(--jp)}
 .rk{font-size:12.5px;line-height:1.8;color:var(--tx3);margin-top:3px}
