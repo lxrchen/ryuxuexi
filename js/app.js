@@ -46,6 +46,19 @@
   const GRAMMAR_BASE = (globalThis.GRAMMAR || []).map(function (g, i) {
     return { id: "g" + i, lv: g[0], l: g[1], n: g[2], f: g[3], m: g[4], e: g[5], t: g[6] };
   });
+  // 教材句型索引并入语法库：中级上/下 → N3/N2，高级上/下 → N1
+  // 释义与例句在教材对应课次的「语法与表达」中，此处先并入条目并标注出处，
+  // 使其可被语法库正常筛选、标记掌握、计入进度统计 —— 而不是独立成一块。
+  (globalThis.TEXTBOOK || []).forEach(function (bk) {
+    (bk.index || []).forEach(function (it, i) {
+      GRAMMAR_BASE.push({
+        id: "bk-" + bk.id + "-" + i,
+        lv: bk.lv, l: it[1], n: it[0], f: "",
+        m: "教材句型 · 见「" + bk.name + "」第 " + it[1] + " 课（语法与表达）",
+        e: "", t: "", from: bk.name
+      });
+    });
+  });
   // 运行时视图 = 内置 + 用户自定义词库，由 rebuildAll() 重建
   let VOCAB = {};
   let VERBS = [];
@@ -1348,8 +1361,8 @@
       const bn = blanksOf(a).length;
       h += '<div class="gitem rdopen" data-rdopen="' + a.id + '"><div class="ghead">'
         + '<span class="gname jp">' + esc(a.t) + '</span>'
-        + '<span class="gmean">' + esc(a.zh) + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
-        + (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>')
+        + '<span class="gmean">' + esc(a.zh) + (a.from ? '　<span class="rt">' + esc(a.from) + '</span>' : '') + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
+        + (a.from ? '<span class="gmark">教材</span>' : (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>'))
         + '</div></div>';
     });
     h += '</div>';
@@ -1477,6 +1490,10 @@
     let h = '<h2>教材大纲 · 中级 / 高级</h2>';
     h += '<p class="tip">新版标日<b>中级（上·下）</b>与<b>高级（上·下）</b>的课程结构与语法条目。'
       + '原书附录是五十音序索引，这里按<b>课次</b>重新分组，方便对着教材逐课核对学到了什么。</p>';
+    h += '<div class="notebox">教材内容已<b>并入各功能模块</b>，这一页只是索引视图：<br>'
+      + '· <b>生词</b> → 已进单词卡队列，听写 / 翻译练习自动可用，进度计入对应等级<br>'
+      + '· <b>语法条目</b> → 已进语法库，可筛选、可标记掌握、计入统计<br>'
+      + '· <b>课文</b> → 已进文章精读，可逐句朗读、做填空与理解题</div>';
     h += '<div class="chips">';
     TEXTBOOK.forEach(function (x, i) {
       h += '<button class="chip' + (i === tb.cur ? " on" : "") + '" data-tbk="' + i + '">' + esc(x.name) + '　' + x.lv + '</button>';
