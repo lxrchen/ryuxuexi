@@ -21,20 +21,33 @@
     N1: normVocab(globalThis.VOCAB_N1, "N1")
   };
   // 教材生词表（中级上/下、高级上/下）并入对应等级，id 加书号前缀避免冲突
-  [
-    ["N3", "ZJC", globalThis.VOCAB_ZJC],
-    ["N2", "ZJD", globalThis.VOCAB_ZJD],
-    ["N1", "GJS", globalThis.VOCAB_GJS],
-    ["N1", "GJX", globalThis.VOCAB_GJX]
-  ].forEach(function (pair) {
-    const lv = pair[0], tag = pair[1], raw = pair[2];
-    if (!raw || !raw.length) return;
-    normVocab(raw, lv).forEach(function (v, i) {
-      v.id = lv + "-" + tag + i;
-      v.book = true;
-      VOCAB_BASE[lv].push(v);
+  // 每本教材是一个「来源」，站内可单独筛选（按册、按课练），不混进内置词池随机抽
+  const BOOKS = [
+    { tag: "ZJC", name: "中级上", lv: "N3", data: globalThis.VOCAB_ZJC },
+    { tag: "ZJD", name: "中级下", lv: "N2", data: globalThis.VOCAB_ZJD },
+    { tag: "GJS", name: "高级上", lv: "N1", data: globalThis.VOCAB_GJS },
+    { tag: "GJX", name: "高级下", lv: "N1", data: globalThis.VOCAB_GJX }
+  ];
+  BOOKS.forEach(function (bk) {
+    if (!bk.data || !bk.data.length) return;
+    normVocab(bk.data, bk.lv).forEach(function (v, i) {
+      v.id = bk.lv + "-" + bk.tag + i;
+      v.book = true;     // 教材来源标记
+      v.src = bk.tag;    // 来源书号（ZJC/ZJD/GJS/GJX）
+      v.bname = bk.name; // 展示名（中级上…）
+      VOCAB_BASE[bk.lv].push(v);
     });
   });
+  // 有词的教材（用于来源筛选按钮）
+  function booksIn(lv) {
+    return BOOKS.filter(function (bk) {
+      return bk.data && bk.data.length && (!lv || bk.lv === lv);
+    });
+  }
+  function bookName(tag) {
+    const bk = BOOKS.filter(function (b) { return b.tag === tag; })[0];
+    return bk ? bk.name : tag;
+  }
 
   const VERBS_BASE = (globalThis.VERBS || []).map(function (v, i) {
     return { id: "v" + i, k: v[0], w: v[1], t: v[2], z: v[3], lv: v[4] };
@@ -72,7 +85,7 @@
   /* ---------- 2. 状态持久化 ---------- */
   const KEY = "jp_studio_v1";
   const DEF = {
-    settings: { goal: "N1", newPerDay: 20, kanaScript: "both", audioMode: "auto", voiceURI: "", ttsRate: 0.9, humanRate: 1 },
+    settings: { goal: "N1", newPerDay: 20, kanaScript: "both", audioMode: "auto", voiceURI: "", ttsRate: 0.9, humanRate: 1, lv: { learn: "N5", review: "N5", read: "N5" } },
     cards: {},        // 单词 SRS: id -> {i,ef,n,due}
     kanaStat: {},     // 假名统计: kana -> {r,w}
     grammar: {},      // 已掌握语法 id -> 1
@@ -227,24 +240,32 @@
     if (c.n === 1 && grade >= 2) S.today.new++; else S.today.rev++;
     save();
   }
-  function dueList(lv) {
+  // 范围过滤：src = "" 全部 / "base" 仅内置 / 书号前缀（ZJC…）仅该教材；lesson = 0 全部课次
+  function inScope(v, src, lesson) {
+    if (src === "base") { if (v.book) return false; }
+    else if (src) { if (v.src !== src) return false; }
+    if (lesson > 0 && v.l !== lesson) return false;
+    return true;
+  }
+  function dueList(lv, src, lesson) {
     const now = Date.now();
     const out = [];
     LEVELS.forEach(function (L) {
       if (lv && L !== lv) return;
       VOCAB[L].forEach(function (v) {
+        if (!inScope(v, src, lesson)) return;
         const c = S.cards[v.id];
         if (c && c.due && c.due <= now) out.push(v);
       });
     });
     return out;
   }
-  function newList(lv, n, lesson) {
+  function newList(lv, n, lesson, src) {
     const out = [];
     LEVELS.forEach(function (L) {
       if (lv && L !== lv) return;
       VOCAB[L].forEach(function (v) {
-        if (lesson && v.l !== lesson) return;   // 先按课号过滤，再取数量（反过来会导致选课后抽不到词）
+        if (!inScope(v, src, lesson)) return;   // 先按来源+课号过滤，再取数量（反过来会导致选课后抽不到词）
         if (!S.cards[v.id]) out.push(v);
       });
     });
@@ -733,25 +754,34 @@
 
   /* ---------- 9. 视图：单词 SRS ---------- */
   // 学习 与 复习 是两套完全独立的状态：各自维护级别、课号范围、队列、进度
-  let ls = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "learn" };
-  let rs = { lv: "N5", queue: [], idx: 0, show: false, lesson: 0, kind: "review" };
+  let ls = { lv: savedLv("learn"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "learn" };
+  let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review" };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
   let queueJustSet = false;   // 本次 render 前队列刚被显式设置过（评分/重建/切范围），不要自动重建
   function setStateFor(route) { vs = (route === "review") ? rs : ls; }
+  // 记住各页所选级别，避免每次刷新都回到 N5（教材内容在 N3/N2/N1，反复切很烦）
+  function savedLv(kind) {
+    const m = S.settings.lv || {};
+    return LEVELS.indexOf(m[kind]) >= 0 ? m[kind] : "N5";
+  }
+  function rememberLv(st) {
+    if (!S.settings.lv) S.settings.lv = {};
+    S.settings.lv[st.kind] = st.lv;
+    save();
+  }
   function modeCounts(st) {
-    return { due: dueList(st.lv).length, "new": newList(st.lv, 9999).length };
+    return { due: dueList(st.lv, st.src, st.lesson).length, "new": newList(st.lv, 9999, st.lesson, st.src).length };
   }
   function buildQueue(fresh, force) {
     const st = vs;
     // 复习：只取「学过且到期」的词，与未学词彻底无关
     // 学习：只取「从没学过」的词
     if (st.kind === "review") {
-      st.queue = shuffle(dueList(st.lv));
-      if (st.lesson > 0) st.queue = st.queue.filter(function (v) { return v.l === st.lesson; });
+      st.queue = shuffle(dueList(st.lv, st.src, st.lesson));
     } else {
       // 每轮最多 10 个，避免一次给太多；force = 用户主动「超额再学」，忽略每日额度
       const quota = force ? 10 : Math.max(0, S.settings.newPerDay - S.today.new);
-      st.queue = newList(st.lv, Math.min(quota, 10), st.lesson);
+      st.queue = newList(st.lv, Math.min(quota, 10), st.lesson, st.src);
     }
     st.idx = 0; st.show = false;
   }
@@ -789,15 +819,35 @@
       return '<div class="done">当前没有可复习的词<br><span class="tip">已学的词都还没到复习时间</span><br><button class="btn" data-go="learn">去学新词</button></div>';
     }
     // 学习页
-    const left = newList(vs.lv, 9999, vs.lesson).length;
+    const left = newList(vs.lv, 9999, vs.lesson, vs.src).length;
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
+    const scope = scopeLabel(vs);
     if (!left) {
-      return '<div class="done">本级别（' + vs.lv + '）的词已全部学完 🎉<br><span class="tip">换个级别继续，或去复习巩固今天的成果</span><br><button class="btn" data-go="review">去复习</button></div>';
+      const other = otherScopeHint(vs);
+      return '<div class="done">' + (scope ? "当前范围" + scope : "本级别（" + vs.lv + "）") + '的新词已全部学完 🎉'
+        + '<br><span class="tip">' + (other || '换个级别继续，或去复习巩固今天的成果') + '</span>'
+        + '<br><button class="btn" data-go="review">去复习</button></div>';
     }
     if (!quotaLeft) {
-      return '<div class="done">今日新词额度已用完（' + S.today.new + '/' + S.settings.newPerDay + '）<br><span class="tip">本级别还有 ' + left + ' 个新词没学，想继续可以超额</span><br><button class="btn" id="vforce">超额再学 10 个</button> <button class="chip" data-go="review">去复习</button></div>';
+      return '<div class="done">今日新词额度已用完（' + S.today.new + '/' + S.settings.newPerDay + '）<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词没学，想继续可以超额</span><br><button class="btn" id="vforce">超额再学 10 个</button> <button class="chip" data-go="review">去复习</button></div>';
     }
-    return '<div class="done">本轮完成 🎉<br><span class="tip">本级别还有 ' + left + ' 个新词可学（今日额度剩余 ' + quotaLeft + '）</span><br><button class="btn" id="vbuild2">再来一轮</button></div>';
+    return '<div class="done">本轮完成 🎉<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词可学（今日额度剩余 ' + quotaLeft + '）</span><br><button class="btn" id="vbuild2">再来一轮</button></div>';
+  }
+  // 当前范围学完了，指出别处还有什么 —— 教材词按册/按课分，不说清用户会以为教材内容没进来
+  function otherScopeHint(st) {
+    const tips = [];
+    if (st.src) {
+      booksIn(st.lv).forEach(function (bk) {
+        if (bk.tag === st.src) return;
+        const n = newList(st.lv, 9999, 0, bk.tag).length;
+        if (n) tips.push(bk.name + ' 还有 ' + n + ' 个');
+      });
+      const nb = newList(st.lv, 9999, 0, "base").length;
+      if (nb) tips.push('内置词还有 ' + nb + ' 个');
+    }
+    const otherLv = LEVELS.filter(function (L) { return L !== st.lv && newList(L, 9999, 0, "").length; });
+    if (otherLv.length) tips.push('其他级别：' + otherLv.join(" / "));
+    return tips.length ? "还有没学的 —— " + tips.join("　·　") : "";
   }
   function viewVocab(st, isReview) {
     let h = '<h2>' + (isReview ? '复习 · 强化已学' : '学新词') + '</h2>';
@@ -810,15 +860,38 @@
       + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
-      h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + '）</button>';
-    });
-    h += '</div><div class="chips">范围：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
-    const lessons = [];
-    VOCAB[st.lv].forEach(function (v) { if (v.l && lessons.indexOf(v.l) < 0) lessons.push(v.l); });
-    lessons.sort(function (a, b) { return a - b; }).forEach(function (l) {
-      h += '<button class="chip' + (st.lesson === l ? " on" : "") + '" data-vl="' + l + '">' + (st.lv === "N5" || st.lv === "N4" ? "第" + l + "课" : "主题" + l) + '</button>';
+      const bk = VOCAB[L].filter(function (v) { return v.book; }).length;
+      h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + (bk ? '·教材' + bk : '') + '）</button>';
     });
     h += '</div>';
+    // 来源筛选：内置 / 各册教材（教材内容不撒进内置池随机抽，可整册整课练）
+    const hasBooks = booksIn(st.lv).length > 0;
+    if (hasBooks) {
+      h += '<div class="chips">来源：<button class="chip' + (st.src === "" ? " on" : "") + '" data-vsrc="">全部</button>'
+        + '<button class="chip' + (st.src === "base" ? " on" : "") + '" data-vsrc="base">内置</button>';
+      booksIn(st.lv).forEach(function (bk) {
+        const n = VOCAB[st.lv].filter(function (v) { return v.src === bk.tag; }).length;
+        h += '<button class="chip' + (st.src === bk.tag ? " on" : "") + '" data-vsrc="' + bk.tag + '">' + bk.name + '（' + n + '）</button>';
+      });
+      h += '</div>';
+    }
+    // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
+    if (!hasBooks || st.src !== "") {
+      h += '<div class="chips">范围：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
+      const lessons = [];
+      VOCAB[st.lv].forEach(function (v) {
+        if (!inScope(v, st.src, 0)) return;
+        if (v.l && lessons.indexOf(v.l) < 0) lessons.push(v.l);
+      });
+      lessons.sort(function (a, b) { return a - b; }).forEach(function (l) {
+        const isBook = st.src && st.src !== "base";
+        const lab = isBook ? "第" + l + "课" : (st.lv === "N5" || st.lv === "N4" ? "第" + l + "课" : "主题" + l);
+        h += '<button class="chip' + (st.lesson === l ? " on" : "") + '" data-vl="' + l + '">' + lab + '</button>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="tip2">本级别含<b>教材生词</b>：先在上方「来源」选一册教材，即可按课次逐课练习。</div>';
+    }
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
     h += '<div class="rowbox">'
       + (isReview
@@ -829,10 +902,18 @@
     h += '<div id="vcard" class="card"></div>';
     return h;
   }
+  // 当前筛选范围的文字描述（来源 + 课次），用于提示「本轮词从哪来」
+  function scopeLabel(st) {
+    const parts = [];
+    if (st.src === "base") parts.push("仅内置词");
+    else if (st.src) parts.push(bookName(st.src));
+    if (st.lesson > 0) parts.push("第 " + st.lesson + " 课");
+    return parts.length ? "（" + parts.join(" · ") + "）" : "";
+  }
   // 说明「为什么本轮只有这么几个词」——否则用户会以为重抽功能坏了
   function queueNote(st, mc, quotaLeft) {
     if (!st.queue.length) return "";   // 空队列的情况由 doneHTML 说明
-    const scope = st.lesson > 0 ? "（已按课号筛选）" : "";
+    const scope = scopeLabel(st);
     if (st.kind === "review") {
       return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个到期词' + scope
         + ' —— 这就是当前<b>所有</b>「已学过且到期」的词，走完就没有了；没背过的新词不会出现在这里。</div>';
@@ -854,7 +935,10 @@
     if (vs.idx >= vs.queue.length) { box.innerHTML = doneHTML(); return; }
     const v = vs.queue[vs.idx];
     const c = S.cards[v.id];
-    const meta = v.lv + "　" + (v.custom ? "我的词库" : (v.lv === "N5" || v.lv === "N4" ? "第" + v.l + "课" : "主题" + v.l)) + "　" + esc(v.p || "")
+    const srcLab = v.custom ? "我的词库"
+      : v.book ? bookName(v.src) + " 第" + v.l + "课"
+      : (v.lv === "N5" || v.lv === "N4" ? "第" + v.l + "课" : "主题" + v.l);
+    const meta = v.lv + "　" + srcLab + "　" + esc(v.p || "")
       + (c ? "　复习 #" + c.n : "　<b>新词</b>") + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
     const word = '<div class="cfront jp"><ruby>' + esc(v.w || v.k) + "<rt>" + (v.w ? esc(v.k) : "") + "</rt></ruby></div>";
     let h = '<div class="cwrap">';
@@ -1292,7 +1376,7 @@
 
   /* ---------- 11d. 视图：文章精读 ---------- */
   let rd = {
-    lv: "N5", cur: null, stage: "read", showK: true, showZ: false,
+    lv: savedLv("read"), cur: null, stage: "read", showK: true, showZ: false,
     bi: 0, br: 0, bw: 0, rev: false,        // 填空
     qi: 0, qr: 0, qw: 0, pick: -1           // 理解题
   };
@@ -1347,12 +1431,17 @@
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
       const n = READING.filter(function (a) { return a.lv === L; }).length;
-      h += '<button class="chip' + (rd.lv === L ? " on" : "") + '" data-rdlv="' + L + '">' + L + '（' + n + '）</button>';
+      const bk = READING.filter(function (a) { return a.lv === L && a.from; }).length;
+      h += '<button class="chip' + (rd.lv === L ? " on" : "") + '" data-rdlv="' + L + '">' + L + '（' + n + (bk ? '·教材' + bk : '') + '）</button>';
     });
     h += '</div>';
     const list = READING.filter(function (a) { return a.lv === rd.lv; });
     if (!list.length) {
-      h += '<p class="tip">该级别暂时还没有文章。目前 N5 / N4 各有若干篇，更高等级在陆续补充。</p>';
+      // 说清哪里有文章（教材课文在 N3/N2/N1），否则用户会以为精读里没有内容
+      const have = LEVELS.filter(function (L) { return READING.some(function (a) { return a.lv === L; }); });
+      h += '<p class="tip">' + rd.lv + ' 暂时还没有文章。'
+        + (have.length ? '目前有内容的是：<b>' + have.join(" / ") + '</b> —— 点上方级别切换，教材课文（中级·高级）在 <b>N3 / N2 / N1</b>。' : '')
+        + '</p>';
       return h;
     }
     h += '<div class="glist">';
@@ -1698,8 +1787,18 @@
     if (t.id === "wclear") { if (confirm("清空错词本？")) { S.wrong = []; save(); render(); } return; }
     if (t.id === "exp") { exportData(); return; }
     if (t.id === "kconf") { showConfuse(); return; }
-    if (A("data-vlv")) { vs.lv = A("data-vlv"); vs.lesson = 0; buildQueue(false); queueJustSet = true; render(); return; }
-    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10); buildQueue(false); queueJustSet = true; render(); return; }
+    if (A("data-vlv")) {
+      vs.lv = A("data-vlv"); vs.lesson = 0;
+      // 换了级别：若原来源（教材册）不属于该级别则重置，避免筛出空队列
+      if (vs.src && vs.src !== "base" && !booksIn(vs.lv).some(function (bk) { return bk.tag === vs.src; })) vs.src = "";
+      rememberLv(vs);
+      buildQueue(false); queueJustSet = true; render(); return;
+    }
+    if (A("data-vsrc") !== null) {
+      vs.src = A("data-vsrc") || ""; vs.lesson = 0;
+      buildQueue(true); queueJustSet = true; render(); return;
+    }
+    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10) || 0; buildQueue(false); queueJustSet = true; render(); return; }
     if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); queueJustSet = true; render(); return; }
     if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); queueJustSet = true; render(); return; }
     if (t.id === "vsay") { const v = vs.queue[vs.idx]; if (v) speak(v.k, { kanji: v.w, kana: v.k }); return; }
@@ -1816,7 +1915,7 @@
     if (t.id === "trnext") { nextTrans(); render(); return; }
 
     if (A("data-tbk")) { tb.cur = parseInt(A("data-tbk"), 10) || 0; render(); return; }
-    if (A("data-rdlv")) { rd.lv = A("data-rdlv"); render(); return; }
+    if (A("data-rdlv")) { rd.lv = A("data-rdlv"); S.settings.lv.read = rd.lv; save(); render(); return; }
     if (A("data-rdopen")) {
       const id = A("data-rdopen");
       rd.cur = READING.filter(function (a) { return a.id === id; })[0] || null;
@@ -2163,7 +2262,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
