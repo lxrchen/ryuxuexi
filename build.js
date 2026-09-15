@@ -18,6 +18,7 @@ const files = [
   "js/data/vocab-n3.js",
   "js/data/vocab-n2.js",
   "js/data/vocab-n1.js",
+  "js/data/vocab-zjc.js",
   "js/data/verbs.js",
   "js/data/grammar.js",
   "js/data/reading.js",

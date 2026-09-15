@@ -20,6 +20,22 @@
     N2: normVocab(globalThis.VOCAB_N2, "N2"),
     N1: normVocab(globalThis.VOCAB_N1, "N1")
   };
+  // 教材生词表（中级上/下、高级上/下）并入对应等级，id 加书号前缀避免冲突
+  [
+    ["N3", "ZJC", globalThis.VOCAB_ZJC],
+    ["N2", "ZJD", globalThis.VOCAB_ZJD],
+    ["N1", "GJS", globalThis.VOCAB_GJS],
+    ["N1", "GJX", globalThis.VOCAB_GJX]
+  ].forEach(function (pair) {
+    const lv = pair[0], tag = pair[1], raw = pair[2];
+    if (!raw || !raw.length) return;
+    normVocab(raw, lv).forEach(function (v, i) {
+      v.id = lv + "-" + tag + i;
+      v.book = true;
+      VOCAB_BASE[lv].push(v);
+    });
+  });
+
   const VERBS_BASE = (globalThis.VERBS || []).map(function (v, i) {
     return { id: "v" + i, k: v[0], w: v[1], t: v[2], z: v[3], lv: v[4] };
   });
