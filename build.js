@@ -99,10 +99,13 @@ try {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(DIST_OUT, f));
   });
 } catch (e) {}
-// 2) 本地双击版
-fs.writeFileSync(path.join(ROOT, "..", OUT_NAME), html, "utf8");
+// 2) 本地双击版（写仓库外，云构建环境父目录可能不可写 —— 失败不影响主产物）
+try {
+  fs.writeFileSync(path.join(ROOT, "..", OUT_NAME), html, "utf8");
+} catch (e) {
+  console.log("  （跳过仓库外单文件版：" + (e && e.code ? e.code : e) + "）");
+}
 
 const kb = (fs.statSync(path.join(DIST, "index.html")).size / 1024).toFixed(0);
 console.log("构建完成");
 console.log("  " + DIST + "\\index.html   (" + kb + " KB)");
-console.log("  " + path.join(ROOT, "..", OUT_NAME) + "   (" + kb + " KB)");

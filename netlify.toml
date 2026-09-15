@@ -1,6 +1,6 @@
 [build]
-  command = "node build.js"
   publish = "dist"
 
-[build.environment]
-  NODE_VERSION = "20"
+# 产物由本地 `node build.js` 生成并提交到 dist/，Netlify 直接发布。
+# 不在云端执行构建 —— 构建脚本会往仓库外写"桌面单文件版"，
+# 云构建环境的父目录不可写，会导致整个构建中断（已踩过）。
