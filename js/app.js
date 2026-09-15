@@ -38,6 +38,7 @@
   const CONFUSE = globalThis.KANA_CONFUSE || [];
   const ROWS = globalThis.KANA_ROWS || [];
   const READING = globalThis.READING || [];
+  const TEXTBOOK = globalThis.TEXTBOOK || [];
 
   /* ---------- 2. 状态持久化 ---------- */
   const KEY = "jp_studio_v1";
@@ -1437,6 +1438,64 @@
     return h;
   }
 
+  /* ---------- 11e. 视图：教材大纲（中级 / 高级） ---------- */
+  let tb = { cur: 0 };
+  function gramsByLesson(b) {
+    const m = {};
+    (b.index || []).forEach(function (it) {
+      const n = it[1];
+      if (!m[n]) m[n] = [];
+      m[n].push(it[0]);
+    });
+    return m;
+  }
+  function tbLessonLabel(b, n) {
+    const l = (b.lessons || []).filter(function (x) { return x.n === n; })[0];
+    if (!l) return "";
+    if (l.topic) return l.topic + (l.text ? "　" + l.text : "");
+    return (l.fn ? l.fn + "　" : "") + (l.conv || "") + (l.text ? " / " + l.text : "");
+  }
+  function viewTextbook() {
+    if (!TEXTBOOK.length) return '<h2>教材大纲</h2><p class="tip">数据未加载。</p>';
+    const b = TEXTBOOK[tb.cur] || TEXTBOOK[0];
+    let h = '<h2>教材大纲 · 中级 / 高级</h2>';
+    h += '<p class="tip">新版标日<b>中级（上·下）</b>与<b>高级（上·下）</b>的课程结构与语法条目。'
+      + '原书附录是五十音序索引，这里按<b>课次</b>重新分组，方便对着教材逐课核对学到了什么。</p>';
+    h += '<div class="chips">';
+    TEXTBOOK.forEach(function (x, i) {
+      h += '<button class="chip' + (i === tb.cur ? " on" : "") + '" data-tbk="' + i + '">' + esc(x.name) + '　' + x.lv + '</button>';
+    });
+    h += '</div>';
+    const gm = gramsByLesson(b);
+    h += '<div class="rowbox"><span><b>' + esc(b.name) + '</b>　' + esc(b.note) + '</span>'
+      + '<span>语法条目：<b>' + (b.index || []).length + '</b> 条</span></div>';
+    if ((b.units || []).length) {
+      h += '<div class="rgtags">' + b.units.map(function (u) {
+        return "第" + u.n + "单元　" + esc(u.t) + "（第 " + u.from + "–" + u.to + " 课）";
+      }).join("　·　") + '</div>';
+    }
+    const nums = Object.keys(gm).map(Number).sort(function (a, c) { return a - c; });
+    h += '<div class="tblist">';
+    nums.forEach(function (n) {
+      const label = tbLessonLabel(b, n);
+      h += '<div class="tbitem"><div class="tbhead"><span class="tbno">第 ' + n + ' 课</span>'
+        + (label ? '<span class="tbtopic jp">' + esc(label) + '</span>' : '')
+        + '<span class="tbcount">' + gm[n].length + ' 条</span></div>';
+      h += '<div class="tbgrams">';
+      gm[n].forEach(function (g) { h += '<span class="tbgram jp">' + esc(g) + '</span>'; });
+      h += '</div></div>';
+    });
+    h += '</div>';
+    if ((b.extra || []).length) {
+      h += '<h3>拓展 · 表达方式专题</h3><div class="tbgrams">';
+      b.extra.forEach(function (x) { h += '<span class="tbgram jp">' + esc(x) + '</span>'; });
+      h += '</div>';
+    }
+    h += '<p class="tip">注：条目按教材附录索引原样录入，课次为原书标注的首次出现课次；'
+      + '个别条目可能因扫描件字迹存在偏差。讲解、例句与练习见教材对应课次。</p>';
+    return h;
+  }
+
   /* ---------- 12. 视图：仪表盘 ---------- */
   function viewDash() {
     rollDay();
@@ -1539,7 +1598,7 @@
     vocab: viewLearn,   // 兼容旧链接 → 学新词
     grammar: viewGrammar,
     drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom,
-    dict: viewDict, trans: viewTrans, read: viewRead
+    dict: viewDict, trans: viewTrans, read: viewRead, textbook: viewTextbook
   };
   function render() {
     const r = (location.hash || "#/home").replace("#/", "");
@@ -1723,6 +1782,7 @@
     }
     if (t.id === "trnext") { nextTrans(); render(); return; }
 
+    if (A("data-tbk")) { tb.cur = parseInt(A("data-tbk"), 10) || 0; render(); return; }
     if (A("data-rdlv")) { rd.lv = A("data-rdlv"); render(); return; }
     if (A("data-rdopen")) {
       const id = A("data-rdopen");
@@ -2070,7 +2130,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
