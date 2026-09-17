@@ -155,6 +155,15 @@ main{max-width:1020px;margin:0 auto;padding:20px 24px 90px;min-height:70vh}
 .hint{font-size:11px;color:var(--tx3);margin-top:12px}
 .hint kbd{background:var(--bg4);border:1px solid var(--bd2);border-radius:4px;padding:1px 5px;font-family:monospace;font-size:10px}
 
+/* 单词卡 · 练习方向 */
+.chint{font-size:12px;color:var(--tx3);margin-top:6px;line-height:1.7}
+.cmean.big{font-size:20px;line-height:1.75;max-width:92%;margin:12px auto}
+.bigsay{width:104px;height:104px;border-radius:50%;margin:6px auto 2px;display:block;
+  border:2px solid var(--ac);background:rgba(139,131,240,.12);color:var(--ac);
+  font-size:38px;line-height:1;cursor:pointer;transition:.18s}
+.bigsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);color:#fff;border-color:transparent;transform:scale(1.05)}
+.bigsay:active{transform:scale(.96)}
+
 /* 语法 */
 .glist{margin-top:12px}
 .gitem{background:var(--bg2);border:1px solid var(--bd);border-radius:12px;margin-bottom:8px;overflow:hidden;transition:.16s}
@@ -332,7 +341,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-15 14:26
+  <br>版本：2026-09-17 16:22
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -4717,8 +4726,14 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   /* ---------- 2. 状态持久化 ---------- */
   const KEY = "jp_studio_v1";
   const DEF = {
-    settings: { goal: "N1", newPerDay: 20, kanaScript: "both", audioMode: "auto", voiceURI: "", ttsRate: 0.9, humanRate: 1, lv: { learn: "N5", review: "N5", read: "N5" } },
-    cards: {},        // 单词 SRS: id -> {i,ef,n,due}
+    settings: {
+      goal: "N1", newPerDay: 20, kanaScript: "both", audioMode: "auto", voiceURI: "", ttsRate: 0.9, humanRate: 1,
+      lv: { learn: "N5", review: "N5", read: "N5" },
+      cardMode: "word",   // 卡片练习方向：word 看词想义 / listen 听音辨义 / mean 看义想词
+      cardKana: true,     // 卡片正面是否显示假名注音（关掉 = 强制回忆读音）
+      autoPlay: true      // 听音模式进入卡片时自动播放
+    },
+    cards: {},        // 单词 SRS: id -> {i,ef,n,due,ph,st,lp}
     kanaStat: {},     // 假名统计: kana -> {r,w}
     grammar: {},      // 已掌握语法 id -> 1
     drill: { r: 0, w: 0, log: [] },
@@ -4855,21 +4870,62 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (got) save();
   }
 
-  /* ---------- 3. SRS（SM-2 简化） ---------- */
+  /* ---------- 3. SRS（SM-2 + 学习步进） ---------- */
   function cardOf(id) {
-    return S.cards[id] || (S.cards[id] = { i: 0, ef: 2.5, n: 0, due: 0 });
+    return S.cards[id] || (S.cards[id] = { i: 0, ef: 2.5, n: 0, due: 0, ph: "l", st: -1, lp: 0 });
+  }
+  /* 学习步（分钟）：新词和答错的词先在当天内走完这几步，才"毕业"进入按天间隔。
+     原先答对一次就直接 +1 天，跳过了遗忘曲线最陡的一段 —— 这是"当天记住了、第二天就忘"的主因。 */
+  const LEARN_STEPS = [1, 10];
+  function isLearning(c) {
+    if (!c) return false;
+    if (c.ph === "l") return true;
+    if (c.ph === "r") return false;
+    return c.i === 0 && !c.n;   // 旧存档（无 ph 字段）：未毕业的才算法在学习中
   }
   function review(id, grade) {
+    const existed = !!S.cards[id];
     const c = cardOf(id);
-    const q = [0, 3, 4, 5][grade];
-    if (q < 3) { c.n = 0; c.i = 0; c.due = Date.now() + 600000; }
-    else {
-      c.n++;
-      c.ef = Math.max(1.3, c.ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
-      c.i = c.n === 1 ? 1 : c.n === 2 ? 6 : Math.round(c.i * c.ef);
-      c.due = Date.now() + c.i * 86400000;
+    const now = Date.now();
+    if (c.ph === undefined) c.ph = (c.i > 0 || c.n > 0) ? "r" : "l";   // 兼容旧存档
+    if (c.st === undefined) c.st = -1;
+    if (c.lp === undefined) c.lp = 0;
+
+    if (c.ph === "l") {
+      if (grade <= 1) {
+        // 没想起来 → 退回第一步，当天内重来（而不是等一天后）
+        c.st = -1; c.lp++;
+        c.i = 0; c.n = 0;
+        c.due = now + LEARN_STEPS[0] * 60000;
+      } else {
+        c.st++;
+        if (c.st >= LEARN_STEPS.length) {
+          // 走完全部学习步 → 毕业，进入按天间隔
+          c.ph = "r"; c.n = Math.max(1, c.n);
+          c.i = 1;
+          c.due = now + 86400000;
+        } else {
+          c.due = now + LEARN_STEPS[c.st] * 60000;
+        }
+      }
+    } else {
+      const q = [0, 3, 4, 5][grade];
+      if (q < 3) {
+        // 已毕业的词答错 → 打回学习步，但保留 ef 与失误计数（不清零长期进度）
+        c.lp++; c.n = 0; c.i = 0;
+        c.ph = "l"; c.st = -1;
+        c.due = now + LEARN_STEPS[0] * 60000;
+      } else {
+        c.n++;
+        c.ef = Math.max(1.3, c.ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
+        let iv = c.n === 1 ? 1 : c.n === 2 ? 6 : Math.round(c.i * c.ef);
+        // 失误过的词间隔打折（最多打到 5 折），逼它多出现几次
+        if (c.lp > 0) iv = Math.max(1, Math.round(iv * Math.max(0.5, 1 - c.lp * 0.15)));
+        c.i = iv;
+        c.due = now + iv * 86400000;
+      }
     }
-    if (c.n === 1 && grade >= 2) S.today.new++; else S.today.rev++;
+    if (!existed && grade >= 2) S.today.new++; else S.today.rev++;
     save();
   }
   // 范围过滤：src = "" 全部 / "base" 仅内置 / 书号前缀（ZJC…）仅该教材；lesson = 0 全部课次
@@ -4891,6 +4947,37 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       });
     });
     return out;
+  }
+  // 学习中（还没毕业）且已到期的词：当日强化用，不受每日新词额度限制
+  function learnDue(lv, src, lesson) {
+    const now = Date.now();
+    const out = [];
+    LEVELS.forEach(function (L) {
+      if (lv && L !== lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, src, lesson)) return;
+        const c = S.cards[v.id];
+        if (c && isLearning(c) && c.due && c.due <= now) out.push(v);
+      });
+    });
+    return out;
+  }
+  // 当前范围里"学习中"（还没毕业）的词：cnt 总数 / due 已到期 / at 最近一个的到期时间
+  function learnStat(lv, src, lesson) {
+    const now = Date.now();
+    let cnt = 0, due = 0, at = 0;
+    LEVELS.forEach(function (L) {
+      if (lv && L !== lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, src, lesson)) return;
+        const c = S.cards[v.id];
+        if (!isLearning(c)) return;
+        cnt++;
+        if (c.due && c.due <= now) due++;
+        else if (c.due && (!at || c.due < at)) at = c.due;
+      });
+    });
+    return { cnt: cnt, due: due, at: at };
   }
   function newList(lv, n, lesson, src) {
     const out = [];
@@ -5390,6 +5477,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review" };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
   let queueJustSet = false;   // 本次 render 前队列刚被显式设置过（评分/重建/切范围），不要自动重建
+  let lastSpokenId = null;    // 听音模式：同一张卡只自动播放一次（翻面不重播）
   function setStateFor(route) { vs = (route === "review") ? rs : ls; }
   // 记住各页所选级别，避免每次刷新都回到 N5（教材内容在 N3/N2/N1，反复切很烦）
   function savedLv(kind) {
@@ -5402,29 +5490,47 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     save();
   }
   function modeCounts(st) {
-    return { due: dueList(st.lv, st.src, st.lesson).length, "new": newList(st.lv, 9999, st.lesson, st.src).length };
+    return {
+      due: dueList(st.lv, st.src, st.lesson).length,
+      "new": newList(st.lv, 9999, st.lesson, st.src).length,
+      learn: learnDue(st.lv, st.src, st.lesson).length
+    };
   }
   function buildQueue(fresh, force) {
     const st = vs;
-    // 复习：只取「学过且到期」的词，与未学词彻底无关
-    // 学习：只取「从没学过」的词
+    // 正在学习步里的词（当日强化）：不占每日新词额度，两个页面都优先安排
+    const ld = shuffle(learnDue(st.lv, st.src, st.lesson));
     if (st.kind === "review") {
-      st.queue = shuffle(dueList(st.lv, st.src, st.lesson));
+      // 复习：已毕业且到期的词 + 还没走完学习步的词（都属于「待巩固」）
+      const rev = dueList(st.lv, st.src, st.lesson).filter(function (v) { return !isLearning(S.cards[v.id]); });
+      st.queue = ld.concat(shuffle(rev));
     } else {
-      // 每轮最多 10 个，避免一次给太多；force = 用户主动「超额再学」，忽略每日额度
+      // 学习：本轮新词（受每日额度）+ 还没走完学习步的词
+      // 每轮最多 10 个新词，避免一次给太多；force = 用户主动「超额再学」，忽略每日额度
       const quota = force ? 10 : Math.max(0, S.settings.newPerDay - S.today.new);
-      st.queue = newList(st.lv, Math.min(quota, 10), st.lesson, st.src);
+      st.queue = ld.concat(newList(st.lv, Math.min(quota, 10), st.lesson, st.src));
     }
     st.idx = 0; st.show = false;
   }
+  // 队列走完后：把刚刚到期、且不在剩余队列里的学习步词补到队尾 ——
+  // 否则「1 分钟后重来」在当轮永远等不到（队列已固定）
+  function refillLearn(st) {
+    const rest = st.queue.slice(st.idx);
+    const extra = learnDue(st.lv, st.src, st.lesson).filter(function (v) { return rest.indexOf(v) < 0; });
+    if (!extra.length) return false;
+    st.queue = st.queue.concat(shuffle(extra).slice(0, 10));
+    return true;
+  }
   // 最近一次到期时间与排队数量（用于告知「下次复习」）
-  function nextDueInfo() {
+  function nextDueInfo(onlyReview) {
     let min = Infinity, cnt = 0;
     const now = Date.now();
     LEVELS.forEach(function (L) {
       VOCAB[L].forEach(function (v) {
         const c = S.cards[v.id];
-        if (c && c.due && c.due > now) { cnt++; if (c.due < min) min = c.due; }
+        if (!c || !c.due || c.due <= now) return;
+        if (onlyReview && isLearning(c)) return;   // 学习中的词单列，不算「下次复习」
+        cnt++; if (c.due < min) min = c.due;
       });
     });
     return { at: min === Infinity ? null : min, cnt: cnt };
@@ -5444,9 +5550,19 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       if (!Object.keys(S.cards).length) {
         return '<div class="done">还没有学过任何词<br><span class="tip">先去「学新词」建立第一批，之后这里才会出现复习内容</span><br><button class="btn" data-go="learn">去学新词</button></div>';
       }
-      const nd = nextDueInfo();
+      const nd = nextDueInfo(true);
+      const ls = learnStat(vs.lv, vs.src, vs.lesson);
+      const learnTip = ls.cnt
+        ? '<br><span class="tip">另有 <b>' + ls.cnt + '</b> 个词正在<b>当天巩固</b>（还没走完学习步）'
+          + (ls.at ? '，最近一个 ' + fmtWhen(ls.at) + ' 会再出现' : '') + '</span>'
+        : '';
       if (nd.at) {
-        return '<div class="done">本轮复习完成 🎉<br><span class="tip">当前没有到期的词了 —— 下次复习：<b>' + fmtWhen(nd.at) + '</b>（还有 ' + nd.cnt + ' 个在排）</span><br><button class="btn" data-go="learn">趁现在学新词</button> <button class="chip" id="vbuild2">重新检查</button></div>';
+        return '<div class="done">本轮复习完成 🎉<br><span class="tip">当前没有到期的词了 —— 下次复习：<b>' + fmtWhen(nd.at) + '</b>（还有 ' + nd.cnt + ' 个在排）</span>' + learnTip + '<br><button class="btn" data-go="learn">趁现在学新词</button> <button class="chip" id="vbuild2">重新检查</button></div>';
+      }
+      if (ls.cnt) {
+        return '<div class="done">当前没有到期的词<br><span class="tip">有 <b>' + ls.cnt + '</b> 个词正在当天巩固中'
+          + (ls.at ? '，最近一个 ' + fmtWhen(ls.at) + ' 会再出现 —— 稍等一下再点「重新检查」' : '')
+          + '</span><br><button class="btn" id="vbuild2">重新检查</button> <button class="chip" data-go="learn">去学新词</button></div>';
       }
       return '<div class="done">当前没有可复习的词<br><span class="tip">已学的词都还没到复习时间</span><br><button class="btn" data-go="learn">去学新词</button></div>';
     }
@@ -5454,16 +5570,22 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const left = newList(vs.lv, 9999, vs.lesson, vs.src).length;
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
     const scope = scopeLabel(vs);
+    const ls2 = learnStat(vs.lv, vs.src, vs.lesson);
+    const learnTip2 = ls2.cnt
+      ? '<br><span class="tip">还有 <b>' + ls2.cnt + '</b> 个词在<b>当天巩固</b>中'
+        + (ls2.at ? '（最近一个 ' + fmtWhen(ls2.at) + '）' : '') + '</span>'
+      : '';
     if (!left) {
       const other = otherScopeHint(vs);
       return '<div class="done">' + (scope ? "当前范围" + scope : "本级别（" + vs.lv + "）") + '的新词已全部学完 🎉'
         + '<br><span class="tip">' + (other || '换个级别继续，或去复习巩固今天的成果') + '</span>'
+        + learnTip2
         + '<br><button class="btn" data-go="review">去复习</button></div>';
     }
     if (!quotaLeft) {
-      return '<div class="done">今日新词额度已用完（' + S.today.new + '/' + S.settings.newPerDay + '）<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词没学，想继续可以超额</span><br><button class="btn" id="vforce">超额再学 10 个</button> <button class="chip" data-go="review">去复习</button></div>';
+      return '<div class="done">今日新词额度已用完（' + S.today.new + '/' + S.settings.newPerDay + '）<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词没学，想继续可以超额</span>' + learnTip2 + '<br><button class="btn" id="vforce">超额再学 10 个</button> <button class="chip" data-go="review">去复习</button></div>';
     }
-    return '<div class="done">本轮完成 🎉<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词可学（今日额度剩余 ' + quotaLeft + '）</span><br><button class="btn" id="vbuild2">再来一轮</button></div>';
+    return '<div class="done">本轮完成 🎉<br><span class="tip">' + (scope ? "当前范围" + scope : "本级别") + '还有 ' + left + ' 个新词可学（今日额度剩余 ' + quotaLeft + '）</span>' + learnTip2 + '<br><button class="btn" id="vbuild2">再来一轮</button></div>';
   }
   // 当前范围学完了，指出别处还有什么 —— 教材词按册/按课分，不说清用户会以为教材内容没进来
   function otherScopeHint(st) {
@@ -5490,6 +5612,25 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       : '这里<b>只会出现你从没背过的词</b>。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
     h += '<div class="rowbox"><span>可练：<b>' + cnt + '</b> 个</span>'
       + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
+    // 练习方向 + 注音开关：随手可切，切换后立即重建本轮
+    const cMode = S.settings.cardMode || "word";
+    const kanaOn = S.settings.cardKana !== false;
+    h += '<div class="chips">练习：';
+    CARD_MODES.forEach(function (m) {
+      h += '<button class="chip' + (cMode === m[0] ? " on" : "") + '" data-cmode="' + m[0] + '">' + m[1] + '</button>';
+    });
+    h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
+    if (cMode === "listen") {
+      const ap = S.settings.autoPlay !== false;
+      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
+    }
+    h += '</div>';
+    h += '<div class="tip2">'
+      + (cMode === "listen" ? '🎧 <b>听音辨义</b>：只放发音，不看字 —— 练「听到就能反应出意思」。按 <kbd>S</kbd> 或点 🔊 重听。'
+        : cMode === "mean" ? '✍️ <b>看义想词</b>：看中文，在脑子里拼出日文写法与读音 —— 从「认得」进阶到「用得出」。'
+          : '👁️ <b>看词想义</b>：看词形想意思。')
+      + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
+      + '</div>';
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
       const bk = VOCAB[L].filter(function (v) { return v.book; }).length;
@@ -5529,6 +5670,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       + (isReview
         ? '<span>今日已复习：<b>' + S.today.rev + '</b></span><span>到期待复习：<b>' + mc.due + '</b></span>'
         : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日额度剩余：<b>' + quotaLeft + '</b></span><span>未学词：<b>' + mc["new"] + '</b></span>')
+      + (mc.learn ? '<span title="还没走完学习步的词（答错或刚学）">巩固中：<b>' + mc.learn + '</b></span>' : '')
       + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重抽本轮</button></div>';
     h += queueNote(st, mc, quotaLeft);
     h += '<div id="vcard" class="card"></div>';
@@ -5546,51 +5688,95 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   function queueNote(st, mc, quotaLeft) {
     if (!st.queue.length) return "";   // 空队列的情况由 doneHTML 说明
     const scope = scopeLabel(st);
+    const ld = mc.learn || 0;
+    const ldTip = ld ? '其中 <b>' + ld + '</b> 个是<b>当天巩固</b>的词（答错或刚学，不占每日额度）' : "";
     if (st.kind === "review") {
-      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个到期词' + scope
-        + ' —— 这就是当前<b>所有</b>「已学过且到期」的词，走完就没有了；没背过的新词不会出现在这里。</div>';
+      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个待巩固词' + scope
+        + (ldTip ? '，' + ldTip : "")
+        + ' —— 走完就没了；没背过的新词不会出现在这里。</div>';
     }
     if (st.lesson > 0) {
-      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个新词' + scope + '。</div>';
+      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个词' + scope + '。' + (ldTip ? ldTip + '。' : "") + '</div>';
     }
     if (quotaLeft < 10) {
-      return '<div class="tip2">本轮只有 <b>' + st.queue.length + '</b> 个 —— 因为<b>今日新词额度只剩 ' + quotaLeft + ' 个</b>'
+      return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个 —— <b>今日新词额度只剩 ' + quotaLeft + ' 个</b>'
         + '（每日额度 ' + S.settings.newPerDay + ' 个，可在「仪表盘 → 每日新词」调整）。'
+        + (ldTip ? ldTip + '。' : "")
         + '本级别还有 ' + mc["new"] + ' 个新词没学：<button class="chip sm" id="vforce2">超额再学 10 个</button></div>';
     }
-    return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个新词（都是你还没背过的）。</div>';
+    return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个词（新词 + 还没记牢要重来的）。' + (ldTip ? ldTip + '。' : "") + '</div>';
   }
   function viewLearn() { return viewVocab(ls, false); }
   function viewReview() { return viewVocab(rs, true); }
+  // 词形（ruby 注音可按设置开关；假名词本身无注音，不受影响）
+  function wordHTML(v, withKana) {
+    const base = esc(v.w || v.k);
+    if (!v.w || !withKana) return '<div class="cfront jp">' + base + "</div>";
+    return '<div class="cfront jp"><ruby>' + base + "<rt>" + esc(v.k) + "</rt></ruby></div>";
+  }
+  function sayWord(v) { if (v) speak(v.k, { kanji: v.w, kana: v.k }); }
+  const CARD_MODES = [["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
+    if (vs.idx >= vs.queue.length) refillLearn(vs);          // 刚到期的学习步词补到队尾
     if (vs.idx >= vs.queue.length) { box.innerHTML = doneHTML(); return; }
     const v = vs.queue[vs.idx];
     const c = S.cards[v.id];
+    const mode = S.settings.cardMode || "word";
+    const showKana = S.settings.cardKana !== false;
     const srcLab = v.custom ? "我的词库"
       : v.book ? bookName(v.src) + " 第" + v.l + "课"
       : (v.lv === "N5" || v.lv === "N4" ? "第" + v.l + "课" : "主题" + v.l);
+    let stateLab;
+    if (!c) stateLab = "　<b>新词</b>";
+    else if (isLearning(c)) stateLab = "　<b>学习中</b>" + (c.lp ? " ·失误 " + c.lp + " 次" : "");
+    else stateLab = "　复习 #" + c.n;
     const meta = v.lv + "　" + srcLab + "　" + esc(v.p || "")
-      + (c ? "　复习 #" + c.n : "　<b>新词</b>") + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
-    const word = '<div class="cfront jp"><ruby>' + esc(v.w || v.k) + "<rt>" + (v.w ? esc(v.k) : "") + "</rt></ruby></div>";
-    let h = '<div class="cwrap">';
-    h += '<div class="cface"><div class="cmeta">' + meta + "</div>" + word;
+      + stateLab + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
     const hasLive = hasHuman(v.w, v.k) ? '<span class="badge-live">真人</span>' : "";
-    h += '<button class="chip" id="vsay">🔊 朗读（S）' + hasLive + '</button>';
-    h += '<div class="grades"><button class="btn" id="vshow">显示释义（空格）</button></div>';
-    h += '<div class="hint">先自己回忆意思，再翻面评分 · 快捷键 <kbd>1</kbd>忘记 <kbd>2</kbd>困难 <kbd>3</kbd>良好 <kbd>4</kbd>简单</div></div>';
-    h += '<div class="cface cback"><div class="cmeta">' + meta + "</div>" + word;
+    const sayBtn = function (bid) { return '<button class="chip" id="' + bid + '">🔊 朗读（S）' + hasLive + "</button>"; };
+
+    // 正面：按练习方向渲染
+    let frontBody;
+    if (mode === "listen") {
+      frontBody = '<button class="bigsay" id="vsay3" title="重听（S）">🔊</button>'
+        + '<div class="chint">听发音 → 想出<b>这个词本身 + 它的意思</b>'
+        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>";
+    } else if (mode === "mean") {
+      frontBody = '<div class="cmean big">' + esc(v.z) + '</div>'
+        + '<div class="chint">看着中文 → 想出<b>日文怎么写、怎么读</b></div>';
+    } else {
+      frontBody = wordHTML(v, showKana)
+        + (v.w && !showKana ? '<div class="chint">注音已隐藏 —— 先自己回忆读音</div>' : "");
+    }
+
+    let h = '<div class="cwrap">';
+    h += '<div class="cface"><div class="cmeta">' + meta + "</div>" + frontBody;
+    if (mode !== "listen") h += sayBtn("vsay");
+    h += '<div class="grades"><button class="btn" id="vshow">显示答案（空格）</button></div>';
+    h += '<div class="hint">'
+      + (mode === "listen" ? "先只听声音回忆，别急着看字 · " : mode === "mean" ? "先在脑子里拼出日文，再翻面 · " : "先自己回忆意思，再翻面 · ")
+      + '快捷键 <kbd>1</kbd>忘记 <kbd>2</kbd>困难 <kbd>3</kbd>良好 <kbd>4</kbd>简单 <kbd>S</kbd>重听</div></div>';
+
+    // 背面：永远是完整信息（词 + 注音 + 释义 + 朗读）
+    h += '<div class="cface cback"><div class="cmeta">' + meta + "</div>" + wordHTML(v, true);
     h += '<div class="cmean">' + esc(v.z) + "</div>";
+    h += sayBtn("vsay2");
     h += '<div class="grades">'
       + '<button class="g again" data-g="0">忘记<kbd>1</kbd></button>'
       + '<button class="g hard" data-g="1">困难<kbd>2</kbd></button>'
       + '<button class="g good" data-g="2">良好<kbd>3</kbd></button>'
       + '<button class="g easy" data-g="3">简单<kbd>4</kbd></button></div>';
-    h += '<div class="hint">评「忘记/困难」会自动进错词本，第二天优先重练</div></div>';
+    h += '<div class="hint">评「忘记/困难」→ <b>1 分钟后</b>当天再来一次；连续答对两次才算学会，之后才按天间隔排复习</div></div>';
     h += "</div>";
     h += '<div class="combo"></div>';
     box.innerHTML = h;
     box.classList.toggle("flipped", !!vs.show);
+    // 听音模式：进入卡片时自动播放一次（翻面不重播）
+    if (mode === "listen" && !vs.show && S.settings.autoPlay !== false && lastSpokenId !== v.id) {
+      lastSpokenId = v.id;
+      setTimeout(function () { sayWord(v); }, 90);
+    } else if (lastSpokenId !== v.id) { lastSpokenId = v.id; }
     // 后台预取下一张的真人音，刷卡时几乎无感
     try { prefetchNext(); } catch (e) {}
   }
@@ -6433,7 +6619,20 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10) || 0; buildQueue(false); queueJustSet = true; render(); return; }
     if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); queueJustSet = true; render(); return; }
     if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); queueJustSet = true; render(); return; }
-    if (t.id === "vsay") { const v = vs.queue[vs.idx]; if (v) speak(v.k, { kanji: v.w, kana: v.k }); return; }
+    if (A("data-cmode")) {
+      S.settings.cardMode = A("data-cmode"); save();
+      lastSpokenId = null;                    // 允许新模式重新自动播放
+      buildQueue(false); queueJustSet = true; render(); return;
+    }
+    if (A("data-ckana") !== null) {
+      S.settings.cardKana = A("data-ckana") === "1"; save(); render(); return;
+    }
+    if (A("data-cautoplay") !== null) {
+      S.settings.autoPlay = A("data-cautoplay") === "1"; save(); render(); return;
+    }
+    if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3") {
+      sayWord(vs.queue[vs.idx]); return;
+    }
     if (t.id === "vshow") { vs.show = true; renderCard(); return; }
     if (A("data-g")) {
       const id = vs.queue[vs.idx].id, g = parseInt(A("data-g"), 10);
@@ -6713,7 +6912,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
         const b = document.querySelector('#vcard .g[data-g="' + (parseInt(k, 10) - 1) + '"]');
         if (b) b.click();
         else if (vs.idx < vs.queue.length) { vs.show = true; renderCard(); }
-      } else if (k === "s" || k === "S") { const v = vs.queue[vs.idx]; if (v) speak(v.k, { kanji: v.w, kana: v.k }); }
+      } else if (k === "s" || k === "S") { sayWord(vs.queue[vs.idx]); }
     } else if (r === "drill") {
       if (k === "Enter") { const b = document.getElementById("dok") || document.getElementById("dnext"); if (b) b.click(); }
     }
@@ -6894,7 +7093,9 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
+    LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
+    sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
