@@ -835,7 +835,7 @@
   let ls = { lv: savedLv("learn"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "learn" };
   let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review" };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
-  let queueJustSet = false;   // 本次 render 前队列刚被显式设置过（评分/重建/切范围），不要自动重建
+  let lastCardRoute = null, lastCardDay = "";   // 上次渲染的卡片页路由/日期：只有进入页面或跨天才重建队列
   let lastSpokenId = null;    // 听音模式：同一张卡只自动播放一次（翻面不重播）
   function setStateFor(route) { vs = (route === "review") ? rs : ls; }
   // 记住各页所选级别，避免每次刷新都回到 N5（教材内容在 N3/N2/N1，反复切很烦）
@@ -1908,11 +1908,17 @@
       a.classList.toggle("on", a.getAttribute("href") === "#/" + r);
     });
     if (r === "kana") { nextKana(); renderKanaQ(); }
+    // 离开卡片页时清空记录 —— 下次再进来会重建队列（拿到最新到期的内容）
+    if (r !== "learn" && r !== "review" && r !== "vocab") lastCardRoute = null;
     if (r === "learn" || r === "review" || r === "vocab") {
-      // 进入页面时重建队列（跨天、已刷完、队列为空都能拿到最新内容）；
-      // 但评分/手动重建/切换范围触发的 render 不能重建，否则会覆盖刚设好的队列
-      if (!queueJustSet) buildQueue(false);
-      queueJustSet = false;
+      // 只有「进入这个页面」或「跨天」时才重建队列 —— 拿到最新的到期内容。
+      // 页内操作（切练习方向 / 注音开关 / 评分…）一律保留当前队列与位置，
+      // 否则用户点个按钮正在看的词就换掉了。
+      const d = today();
+      if (lastCardRoute !== r || lastCardDay !== d) {
+        buildQueue(false);
+        lastCardRoute = r; lastCardDay = d;
+      }
       renderCard();
     }
     if (r === "drill") renderDrill();
@@ -1969,19 +1975,20 @@
       // 换了级别：若原来源（教材册）不属于该级别则重置，避免筛出空队列
       if (vs.src && vs.src !== "base" && !booksIn(vs.lv).some(function (bk) { return bk.tag === vs.src; })) vs.src = "";
       rememberLv(vs);
-      buildQueue(false); queueJustSet = true; render(); return;
+      buildQueue(false); render(); return;
     }
     if (A("data-vsrc") !== null) {
       vs.src = A("data-vsrc") || ""; vs.lesson = 0;
-      buildQueue(true); queueJustSet = true; render(); return;
+      buildQueue(true); render(); return;
     }
-    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10) || 0; buildQueue(false); queueJustSet = true; render(); return; }
-    if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); queueJustSet = true; render(); return; }
-    if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); queueJustSet = true; render(); return; }
+    if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10) || 0; buildQueue(false); render(); return; }
+    if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); render(); return; }
+    if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); render(); return; }
     if (A("data-cmode")) {
       S.settings.cardMode = A("data-cmode"); save();
       lastSpokenId = null;                    // 允许新模式重新自动播放
-      buildQueue(false); queueJustSet = true; render(); return;
+      vs.show = false;                        // 换练法 → 这张卡从正面重看一遍，但不换词
+      render(); return;
     }
     if (A("data-ckana") !== null) {
       S.settings.cardKana = A("data-ckana") === "1"; save(); render(); return;
@@ -1998,7 +2005,7 @@
       review(id, g);
       if (g <= 1) pushWrong(id); else popWrong(id);
       bumpCombo(g >= 2); addXp(g >= 2 ? 10 : 2); syncBadges();
-      vs.idx++; vs.show = false; queueJustSet = true; render(); return;
+      vs.idx++; vs.show = false; render(); return;
     }
     if (A("data-glv")) { gs.lv = A("data-glv"); render(); return; }
     if (A("data-gid")) {
