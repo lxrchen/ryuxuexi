@@ -350,7 +350,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-18 14:56
+  <br>版本：2026-09-18 16:58
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -5536,6 +5536,32 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     });
     return out;
   }
+  /* 自主复习：把「学过的词」全部取出来，**不看到期时间**。
+   * 复习页原先只有 dueList，用户想主动过一遍已学的词只能干等到期；
+   * 这里按 due 升序排 = 逾期最久的排最前，正好是「最该先复习」的顺序。
+   * wrongOnly=true 时只取错词本里的（针对性补弱）。 */
+  function studiedList(lv, src, lesson, wrongOnly) {
+    const out = [];
+    LEVELS.forEach(function (L) {
+      if (lv && L !== lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, src, lesson)) return;
+        const c = S.cards[v.id];
+        if (!c) return;                                        // 没学过 → 不属于复习范围
+        if (wrongOnly && S.wrong.indexOf(v.id) < 0) return;
+        out.push({ v: v, d: c.due || 0, n: c.n || 0 });
+      });
+    });
+    // due 升序（逾期在前）；due 相同则复习次数少的优先。sort 稳定，同键保持原顺序
+    out.sort(function (a, b) { return a.d - b.d || a.n - b.n; });
+    return out.map(function (x) { return x.v; });
+  }
+  /* 某级别里「已学」的词数（复习页级别按钮上显示，便于挑级别针对性复习） */
+  function studiedCount(lv) {
+    let n = 0;
+    (VOCAB[lv] || []).forEach(function (v) { if (S.cards[v.id]) n++; });
+    return n;
+  }
   // 学习中（还没毕业）且已到期的词：当日强化用，不受每日新词额度限制
   function learnDue(lv, src, lesson) {
     const now = Date.now();
@@ -6066,7 +6092,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   /* ---------- 9. 视图：单词 SRS ---------- */
   // 学习 与 复习 是两套完全独立的状态：各自维护级别、课号范围、队列、进度
   let ls = { lv: savedLv("learn"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "learn" };
-  let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review" };
+  let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review", rmode: "due" };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
   let lastCardRoute = null, lastCardDay = "";   // 上次渲染的卡片页路由/日期：只有进入页面或跨天才重建队列
   let lastSpokenId = null;    // 听音模式：同一张卡只自动播放一次（翻面不重播）
@@ -6085,17 +6111,27 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     return {
       due: dueList(st.lv, st.src, st.lesson).length,
       "new": newList(st.lv, 9999, st.lesson, st.src).length,
-      learn: learnDue(st.lv, st.src, st.lesson).length
+      learn: learnDue(st.lv, st.src, st.lesson).length,
+      all: studiedList(st.lv, st.src, st.lesson, false).length,
+      wrong: studiedList(st.lv, st.src, st.lesson, true).length
     };
   }
+  // 复习选词方式：due=只到期的（默认）/ all=学过的全部（自主复习）/ wrong=只练错词
+  const RMODES = [["due", "到期待复习"], ["all", "全部已学"], ["wrong", "只练错词"]];
   function buildQueue(fresh, force) {
     const st = vs;
     // 正在学习步里的词（当日强化）：不占每日新词额度，两个页面都优先安排
     const ld = shuffle(learnDue(st.lv, st.src, st.lesson));
     if (st.kind === "review") {
-      // 复习：已毕业且到期的词 + 还没走完学习步的词（都属于「待巩固」）
-      const rev = dueList(st.lv, st.src, st.lesson).filter(function (v) { return !isLearning(S.cards[v.id]); });
-      st.queue = ld.concat(shuffle(rev));
+      const rm = st.rmode || "due";
+      if (rm === "all" || rm === "wrong") {
+        // 自主复习：不看到期时间，把学过的词全给出来（已按最该复习的顺序排好，不再打乱）
+        st.queue = studiedList(st.lv, st.src, st.lesson, rm === "wrong");
+      } else {
+        // 复习：已毕业且到期的词 + 还没走完学习步的词（都属于「待巩固」）
+        const rev = dueList(st.lv, st.src, st.lesson).filter(function (v) { return !isLearning(S.cards[v.id]); });
+        st.queue = ld.concat(shuffle(rev));
+      }
     } else {
       // 学习：本轮新词（受每日额度）+ 还没走完学习步的词
       // 每轮最多 10 个新词，避免一次给太多；force = 用户主动「超额再学」，忽略每日额度
@@ -6139,9 +6175,30 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   // 队列走完时的收尾提示：必须说清「为什么没词了」，否则用户会以为按钮坏了
   function doneHTML() {
     if (vs.kind === "review") {
-      if (!Object.keys(S.cards).length) {
-        return '<div class="done">还没有学过任何词<br><span class="tip">先去「学新词」建立第一批，之后这里才会出现复习内容</span><br><button class="btn" data-go="learn">去学新词</button></div>';
+      const rm = vs.rmode || "due";
+      const allN = studiedList(vs.lv, vs.src, vs.lesson, false).length;
+      const wrongN = studiedList(vs.lv, vs.src, vs.lesson, true).length;
+      // 当前范围内一个学过的词都没有
+      if (!allN) {
+        return Object.keys(S.cards).length
+          ? '<div class="done">当前范围还没有学过的词<br><span class="tip">这个级别 / 来源你还没开始学 —— 换个级别看看，或先去「学新词」开始</span><br><button class="btn" data-go="learn">去学新词</button></div>'
+          : '<div class="done">还没有学过任何词<br><span class="tip">先去「学新词」建立第一批，之后这里才会出现复习内容</span><br><button class="btn" data-go="learn">去学新词</button></div>';
       }
+      // 自主复习模式：走完 = 这一轮过完了
+      if (rm === "all" || rm === "wrong") {
+        const lab = rm === "wrong" ? "错词" : "学过的词";
+        const sub = rm === "wrong"
+          ? (wrongN ? '这 ' + wrongN + ' 个都是你答错过的 —— 过完一轮再回头看看还错不错。' : '错词本是空的 🎉 答错的词会自动进来。')
+          : '共 ' + allN + ' 个学过的词，已按<b>最久没复习</b>的顺序排好。';
+        return '<div class="done">这一轮' + lab + '过完了 🎉<br><span class="tip">' + sub + '</span>'
+          + '<br><button class="btn" id="vbuild2">再过一轮</button> <button class="chip" data-rvmode="due">回到「到期待复习」</button></div>';
+      }
+      // 默认模式（到期待复习）：没词时主动引导去自主复习 —— 否则用户只能干等
+      const selfTip = allN
+        ? '<br><span class="tip">不想等？你在这个范围有 <b>' + allN + '</b> 个学过的词，可以现在<b>自主复习</b>（不看到期时间）</span>'
+          + '<br><button class="btn" data-rvmode="all">自主复习这 ' + allN + ' 个</button>'
+          + (wrongN ? ' <button class="chip" data-rvmode="wrong">只练错词（' + wrongN + '）</button>' : '')
+        : '';
       const nd = nextDueInfo(true);
       const ls = learnStat(vs.lv, vs.src, vs.lesson);
       const learnTip = ls.cnt
@@ -6149,14 +6206,14 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
           + (ls.at ? '，最近一个 ' + fmtWhen(ls.at) + ' 会再出现' : '') + '</span>'
         : '';
       if (nd.at) {
-        return '<div class="done">本轮复习完成 🎉<br><span class="tip">当前没有到期的词了 —— 下次复习：<b>' + fmtWhen(nd.at) + '</b>（还有 ' + nd.cnt + ' 个在排）</span>' + learnTip + '<br><button class="btn" data-go="learn">趁现在学新词</button> <button class="chip" id="vbuild2">重新检查</button></div>';
+        return '<div class="done">本轮复习完成 🎉<br><span class="tip">当前没有到期的词了 —— 下次复习：<b>' + fmtWhen(nd.at) + '</b>（还有 ' + nd.cnt + ' 个在排）</span>' + learnTip + selfTip + '<br><button class="btn" data-go="learn">趁现在学新词</button> <button class="chip" id="vbuild2">重新检查</button></div>';
       }
       if (ls.cnt) {
         return '<div class="done">当前没有到期的词<br><span class="tip">有 <b>' + ls.cnt + '</b> 个词正在当天巩固中'
           + (ls.at ? '，最近一个 ' + fmtWhen(ls.at) + ' 会再出现 —— 稍等一下再点「重新检查」' : '')
-          + '</span><br><button class="btn" id="vbuild2">重新检查</button> <button class="chip" data-go="learn">去学新词</button></div>';
+          + '</span>' + selfTip + '<br><button class="btn" id="vbuild2">重新检查</button> <button class="chip" data-go="learn">去学新词</button></div>';
       }
-      return '<div class="done">当前没有可复习的词<br><span class="tip">已学的词都还没到复习时间</span><br><button class="btn" data-go="learn">去学新词</button></div>';
+      return '<div class="done">当前没有到期的词<br><span class="tip">已学的词都还没到复习时间</span>' + selfTip + '<br><button class="btn" data-go="learn">去学新词</button></div>';
     }
     // 学习页
     const left = newList(vs.lv, 9999, vs.lesson, vs.src).length;
@@ -6198,12 +6255,35 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   function viewVocab(st, isReview) {
     let h = '<h2>' + (isReview ? '复习 · 强化已学' : '学新词') + '</h2>';
     const mc = modeCounts(st);
-    const cnt = isReview ? mc.due : mc["new"];
+    const rm = st.rmode || "due";
+    const cnt = isReview ? (rm === "due" ? mc.due : rm === "wrong" ? mc.wrong : mc.all) : mc["new"];
     h += '<p class="tip">' + (isReview
-      ? '这里<b>只会出现你已经学过、且到了复习时间的词</b>。没背过的新词不会混进来 —— 想学新词请去「学新词」页。'
+      ? (rm === "due"
+        ? '这里<b>只会出现你已经学过、且到了复习时间的词</b>。没背过的新词不会混进来 —— 想学新词请去「学新词」页。'
+        : rm === "wrong"
+          ? '这里<b>只会出现你答错过的词</b>（错词本），可以随时反复练，不用等到期。'
+          : '这里出现你<b>学过的全部词</b>，不看到期时间 —— 想主动过一遍就用这个。按「最久没复习」的顺序排。')
       : '这里<b>只会出现你从没背过的词</b>。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
     h += '<div class="rowbox"><span>可练：<b>' + cnt + '</b> 个</span>'
       + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
+    // 复习选词方式：默认只出到期的；也可主动过全部已学 / 只练错词（不受到期时间限制）
+    if (isReview) {
+      h += '<div class="chips">选词：';
+      RMODES.forEach(function (m) {
+        const n = m[0] === "due" ? mc.due : m[0] === "wrong" ? mc.wrong : mc.all;
+        const ttl = m[0] === "all" ? ' title="不看到期时间，想复习就复习"' : m[0] === "wrong" ? ' title="只练你答错过的词"' : ' title="按 SRS 到期的词（默认）"';
+        h += '<button class="chip' + (rm === m[0] ? " on" : "") + '" data-rvmode="' + m[0] + '"' + ttl + '>'
+          + m[1] + '（' + n + '）</button>';
+      });
+      h += '</div>';
+      if (rm !== "due") {
+        h += '<div class="tip2">'
+          + (rm === "wrong"
+            ? '🎯 <b>只练错词</b>：这些都是你评过「忘记 / 困难」的词，答对会移出错词本。配合下方<b>级别 / 来源 / 课次</b>可以精准补弱。'
+            : '🗂️ <b>全部已学</b>：不看到期时间，随时想复习就复习。顺序按「最久没复习」排 —— 刚学完的也在最前面。评分照常更新下次复习时间。')
+          + '</div>';
+      }
+    }
     // 练习方向 + 注音开关：随手可切，切换后立即重建本轮
     const cMode = S.settings.cardMode || "word";
     const kanaOn = S.settings.cardKana !== false;
@@ -6225,6 +6305,14 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       + '</div>';
     h += '<div class="chips">级别：';
     LEVELS.forEach(function (L) {
+      // 复习页显示「已学 N」—— 自主复习时挑级别要看已经学了多少，而不是总量
+      if (isReview) {
+        const sn = studiedCount(L);
+        h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '"'
+          + (sn ? ' title="' + L + '：已学 ' + sn + ' / 共 ' + VOCAB[L].length + ' 个"' : '') + '>'
+          + L + '（已学 ' + sn + '）</button>';
+        return;
+      }
       const bk = VOCAB[L].filter(function (v) { return v.book; }).length;
       h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + (bk ? '·教材' + bk : '') + '）</button>';
     });
@@ -6242,7 +6330,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     }
     // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
     if (!hasBooks || st.src !== "") {
-      h += '<div class="chips">范围：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
+      h += '<div class="chips">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
       const lessons = [];
       VOCAB[st.lv].forEach(function (v) {
         if (!inScope(v, st.src, 0)) return;
@@ -6260,7 +6348,10 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
     h += '<div class="rowbox">'
       + (isReview
-        ? '<span>今日已复习：<b>' + S.today.rev + '</b></span><span>到期待复习：<b>' + mc.due + '</b></span>'
+        ? '<span>今日已复习：<b>' + S.today.rev + '</b></span>'
+          + (rm === "due" ? '<span>到期待复习：<b>' + mc.due + '</b></span>'
+            : rm === "wrong" ? '<span>错词：<b>' + mc.wrong + '</b></span>'
+              : '<span>已学可练：<b>' + mc.all + '</b></span>')
         : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日额度剩余：<b>' + quotaLeft + '</b></span><span>未学词：<b>' + mc["new"] + '</b></span>')
       + (mc.learn ? '<span title="还没走完学习步的词（答错或刚学）">巩固中：<b>' + mc.learn + '</b></span>' : '')
       + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重抽本轮</button></div>';
@@ -6283,9 +6374,18 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const ld = mc.learn || 0;
     const ldTip = ld ? '其中 <b>' + ld + '</b> 个是<b>当天巩固</b>的词（答错或刚学，不占每日额度）' : "";
     if (st.kind === "review") {
+      const rm = st.rmode || "due";
+      if (rm === "all") {
+        return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个学过的词' + scope
+          + ' —— 不看到期时间，按<b>最久没复习</b>的顺序排（刚学完的也在最前面）。评分照常更新下次复习时间。</div>';
+      }
+      if (rm === "wrong") {
+        return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个错词' + scope
+          + ' —— 都是你评过「忘记 / 困难」的词；答对会移出错词本。</div>';
+      }
       return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个待巩固词' + scope
         + (ldTip ? '，' + ldTip : "")
-        + ' —— 走完就没了；没背过的新词不会出现在这里。</div>';
+        + ' —— 走完就没了；没背过的新词不会出现在这里。想再过一遍已学的词，把上方「选词」切到<b>全部已学</b>。</div>';
     }
     if (st.lesson > 0) {
       return '<div class="tip2">本轮 <b>' + st.queue.length + '</b> 个词' + scope + '。' + (ldTip ? ldTip + '。' : "") + '</div>';
@@ -7225,6 +7325,11 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       vs.src = A("data-vsrc") || ""; vs.lesson = 0;
       buildQueue(true); render(); return;
     }
+    // 复习选词方式（到期 / 全部已学 / 只练错词）：切换即重排队列
+    if (A("data-rvmode")) {
+      vs.rmode = A("data-rvmode");
+      buildQueue(false); render(); return;
+    }
     if (A("data-vl")) { vs.lesson = parseInt(A("data-vl"), 10) || 0; buildQueue(false); render(); return; }
     if (t.id === "vbuild" || t.id === "vbuild2") { buildQueue(true); render(); return; }
     if (t.id === "vforce" || t.id === "vforce2") { buildQueue(true, true); render(); return; }
@@ -7716,6 +7821,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   rollDay();
   rebuildAll();
   globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, realSentences: realSentences, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
+    studiedList: studiedList, studiedCount: studiedCount, RMODES: RMODES,
     LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
