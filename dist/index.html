@@ -274,6 +274,10 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   color:var(--tx2);font-size:15px;cursor:pointer;transition:.15s;line-height:1;padding:0}
 .rsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
 .rsay.playing{background:linear-gradient(135deg,var(--ac2),#3fb98f);border-color:transparent;color:#fff}
+.rsay.slow{font-size:11px;color:var(--warn);border-color:rgba(216,164,60,.45)}
+.rsay.slow:hover{background:linear-gradient(135deg,#d8a43c,#b3831f);border-color:transparent;color:#fff}
+.rsay.slow.playing{background:linear-gradient(135deg,#d8a43c,#b3831f);border-color:transparent;color:#fff}
+.slowrow{margin-top:10px}
 .rbody{flex:1;min-width:0}
 .rj{font-size:17px;line-height:1.9;color:var(--tx);font-family:var(--jp)}
 .rk{font-size:12.5px;line-height:1.8;color:var(--tx3);margin-top:3px}
@@ -341,7 +345,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-17 16:44
+  <br>版本：2026-09-18 10:47
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -4403,6 +4407,369 @@ globalThis.READING = [
       { q: "JRは以前、どんな鉄道でしたか。", o: ["私鉄", "国営の鉄道", "公営の鉄道"], a: 1, z: "「以前は国営の鉄道でしたが、1987年に民営化されました」——以前是国营，1987 年民营化。" },
       { q: "「日本でいちばん高い駅」はどこですか。", o: ["新大阪駅", "東京駅", "九州駅"], a: 1, z: "答案在最后一句：东京站，因为它是“上行”的终点站。这也是个文字游戏——「高い」既可指“高”，也可指“等级高”。" }
     ]
+  },
+  {
+    id: "rd-n3-2", lv: "N3", t: "日本語を勉強して", zh: "学日语这件事",
+    s: [
+      { j: "私は大学に入ってから、日本語の勉強を始めました。",
+        k: "わたしは だいがくに はいってから、にほんごの べんきょうを はじめました。",
+        z: "我上大学之后开始学日语。",
+        g: "～てから（之后）· ます形（礼貌体）" },
+      { j: "最初は、いくら覚えてもすぐに忘れてしまいました。",
+        k: "さいしょは、いくら おぼえても すぐに わすれてしまいました。",
+        z: "一开始，不管怎么记，很快就会忘光。",
+        b: { a: "ても", k: "ても", h: "无论怎么记也……" },
+        g: "いくら～ても（无论多么…也）· ～てしまう（彻底/遗憾）" },
+      { j: "でも、先生に「覚える以上に、使うことが大切だ」と言われました。",
+        k: "でも、せんせいに「おぼえる いじょうに、つかうことが たいせつだ」と いわれました。",
+        z: "但是，老师对我说：「比起记住，会用更重要。」",
+        b: { a: "以上に", k: "いじょうに", h: "比……更" },
+        g: "～以上に（比…更）· ～と言われる（被说）" },
+      { j: "それから、どんなに忙しくても、毎日三十分は日本語を読むようにしています。",
+        k: "それから、どんなに いそがしくても、まいにち さんじゅっぷんは にほんごを よむようにしています。",
+        z: "从那以后，不管多忙，我每天都尽量读上三十分钟日语。",
+        b: { a: "どんなに", k: "どんなに", h: "无论多么……" },
+        g: "どんなに～ても（无论多么…也）· ～ようにしている（坚持做到）" },
+      { j: "単語を一つずつ覚えるのは大変ですが、少しずつ分かるようになりました。",
+        k: "たんごを ひとつずつ おぼえるのは たいへんですが、すこしずつ わかるようになりました。",
+        z: "一个一个记单词很辛苦，但渐渐地能看懂了。",
+        b: { a: "ようになりました", k: "ようになりました", h: "变得……了" },
+        g: "～ようになる（变得会…）" },
+      { j: "日本語は難しいといわれていますが、毎日続ければ必ず上達します。",
+        k: "にほんごは むずかしいと いわれていますが、まいにち つづければ かならず じょうたつします。",
+        z: "虽说日语很难，但只要每天坚持就一定会进步。",
+        b: { a: "といわれています", k: "といわれています", h: "据说……" },
+        g: "～といわれている（据说）· ～ば（只要）" },
+      { j: "私にとって、日本語を勉強することは、新しい世界を開くことです。",
+        k: "わたしにとって、にほんごを べんきょうすることは、あたらしい せかいを ひらくことです。",
+        z: "对我来说，学日语就是打开一个新世界。",
+        b: { a: "にとって", k: "にとって", h: "对……来说" },
+        g: "～にとって（对…来说）" }
+    ],
+    q: [
+      { q: "「私」はいつ日本語の勉強を始めましたか。", o: ["高校に入ってから", "大学に入ってから", "日本へ来てから"], a: 1, z: "第一句「大学に入ってから、日本語の勉強を始めました」。" },
+      { q: "先生は何が大切だと言いましたか。", o: ["覚えること", "使うこと", "読むこと"], a: 1, z: "「覚える以上に、使うことが大切だ」——比起记住，会用更重要。" },
+      { q: "現在「私」はどんな勉強を続けていますか。", o: ["毎日三十分読む", "毎日一時間書く", "週に一度話す"], a: 0, z: "「毎日三十分は日本語を読むようにしています」——每天尽量读三十分钟。" }
+    ]
+  },
+  {
+    id: "rd-n3-3", lv: "N3", t: "日本の四季", zh: "日本的四季",
+    s: [
+      { j: "日本には春夏秋冬があり、それぞれに違った楽しみがあります。",
+        k: "にほんには はるなつあきふゆが あり、それぞれに ちがった たのしみが あります。",
+        z: "日本有春夏秋冬，各有各的乐趣。",
+        g: "～があり（并列）· それぞれに" },
+      { j: "春は桜の季節として有名で、多くの人が花見に出かけます。",
+        k: "はるは さくらの きせつとして ゆうめいで、おおくの ひとが はなみに でかけます。",
+        z: "春天作为樱花的季节很有名，很多人出门赏花。",
+        b: { a: "として", k: "として", h: "作为……" },
+        g: "～として（作为）" },
+      { j: "夏はとても暑いですが、各地で祭りが開かれます。",
+        k: "なつは とても あついですが、かくちで まつりが ひらかれます。",
+        z: "夏天很热，但各地都会举办祭典。",
+        g: "受身形（開かれます）" },
+      { j: "秋は食べ物がおいしいといわれていて、山の紅葉も美しいです。",
+        k: "あきは たべものが おいしいと いわれていて、やまの こうようも うつくしいです。",
+        z: "据说秋天的食物好吃，山上的红叶也很美。",
+        b: { a: "といわれていて", k: "といわれていて", h: "据说……" },
+        g: "～といわれている（据说）" },
+      { j: "冬は寒いですが、温泉に入るのは気持ちがいいものです。",
+        k: "ふゆは さむいですが、おんせんに はいるのは きもちが いいものです。",
+        z: "冬天很冷，但泡温泉的确很舒服。",
+        g: "～は～ものです（的确是…）" },
+      { j: "外国人にとって、日本の四季はとても新鮮に感じられるようです。",
+        k: "がいこくじんにとって、にほんの しきは とても しんせんに かんじられるようです。",
+        z: "对外国人来说，日本的四季似乎让人感到很新鲜。",
+        b: { a: "にとって", k: "にとって", h: "对……来说" },
+        g: "～にとって（对…来说）· ～ようだ（似乎）" },
+      { j: "私にしたら、秋が一番好きです。空気が澄んで、静かに本を読めるからです。",
+        k: "わたしにしたら、あきが いちばん すきです。くうきが すんで、しずかに ほんを よめるからです。",
+        z: "就我而言最喜欢秋天。因为空气清澄，能安静地读书。",
+        b: { a: "にしたら", k: "にしたら", h: "就……而言" },
+        g: "～にしたら（从…的角度看）· ～からです（说明理由）" }
+    ],
+    q: [
+      { q: "春は何で有名ですか。", o: ["紅葉", "桜", "温泉"], a: 1, z: "「春は桜の季節として有名で」——春天以樱花闻名。" },
+      { q: "秋について、本文と合っているものはどれですか。", o: ["食べ物がおいしいといわれている", "各地で祭りが開かれる", "花見ができる"], a: 0, z: "「秋は食べ物がおいしいといわれていて」——祭典是夏天，赏花是春天。" },
+      { q: "「私」が秋を一番好きな理由は何ですか。", o: ["食べ物がおいしいから", "温泉に入れるから", "空気が澄んで静かに読書できるから"], a: 2, z: "最后一句：「空気が澄んで、静かに本を読めるからです」。" }
+    ]
+  },
+  {
+    id: "rd-n3-4", lv: "N3", t: "私の故郷", zh: "我的故乡",
+    s: [
+      { j: "私の故郷は、山に囲まれた小さな町です。",
+        k: "わたしの こきょうは、やまに かこまれた ちいさな まちです。",
+        z: "我的故乡是一个被山环绕的小镇。",
+        g: "受身形（囲まれた）作定语" },
+      { j: "空気はきれいだし、水もおいしいし、住むにはとてもいいところです。",
+        k: "くうきは きれいだし、みずも おいしいし、すむには とても いいところです。",
+        z: "空气清新，水也好喝，是个非常适合居住的地方。",
+        g: "～し、～し（列举理由）· ～には（评价的基准）" },
+      { j: "故郷といえば、いつも思い出すのは町の中央にある古い橋です。",
+        k: "こきょうと いえば、いつも おもいだすのは まちの ちゅうおうにある ふるい はしです。",
+        z: "说起故乡，我总会想起镇中央的那座老桥。",
+        b: { a: "といえば", k: "といえば", h: "说起……" },
+        g: "～といえば（说起）· ～にある（在…的）" },
+      { j: "子供のころ、友達とよくその橋の下で遊びました。",
+        k: "こどものころ、ともだちと よく その はしの したで あそびました。",
+        z: "小时候，我常和朋友在那座桥下玩。",
+        g: "～のころ（…的时候）" },
+      { j: "町には大きな工場がないので、若い人は大都市へ働きに出ます。",
+        k: "まちには おおきな こうじょうが ないので、わかいひとは だいとしへ はたらきに でます。",
+        z: "镇上没有大工厂，所以年轻人都会去大城市工作。",
+        b: { a: "ので", k: "ので", h: "因为……（客观原因）" },
+        g: "～ので（原因）· ～に行く／～に出る（去做什么）" },
+      { j: "私も大学に入るために故郷を離れましたが、今でも年に一度は帰ります。",
+        k: "わたしも だいがくに はいるために こきょうを はなれましたが、いまでも ねんに いちどは かえります。",
+        z: "我也为了上大学离开了故乡，但现在仍然一年回去一次。",
+        b: { a: "ために", k: "ために", h: "为了……" },
+        g: "～ために（目的）· 今でも（现在仍然）" },
+      { j: "故郷のことを考えると、いつも心が暖かくなります。",
+        k: "こきょうの ことを かんがえると、いつも こころが あたたかくなります。",
+        z: "一想到故乡，心里总是暖暖的。",
+        g: "～と（一…就）· 形容词くなる（变得）" }
+    ],
+    q: [
+      { q: "「私」の故郷はどんな町ですか。", o: ["海に面した大きな町", "山に囲まれた小さな町", "川のそばの工業都市"], a: 1, z: "第一句：「山に囲まれた小さな町です」。" },
+      { q: "若い人はなぜ大都市へ行きますか。", o: ["学校がないから", "大きな工場がないから", "橋がないから"], a: 1, z: "「町には大きな工場がないので、若い人は大都市へ働きに出ます」。" },
+      { q: "「私」は今、どのくらい故郷に帰りますか。", o: ["年に一度", "月に一度", "週に一度"], a: 0, z: "「今でも年に一度は帰ります」——现在也一年回去一次。" }
+    ]
+  },
+  {
+    id: "rd-n3-5", lv: "N3", t: "環境のためにできること", zh: "为环境能做的事",
+    s: [
+      { j: "地球の環境を守ることは、今や全人類の課題です。",
+        k: "ちきゅうの かんきょうを まもることは、いまや ぜんじんるいの かだいです。",
+        z: "保护地球环境，如今是全人类的课题。",
+        g: "～ことは（把动词名词化）· 今や（如今）" },
+      { j: "一人の力は小さいかもしれませんが、みんなでやれば大きな力になるに違いありません。",
+        k: "ひとりの ちからは ちいさいかもしれませんが、みんなで やれば おおきな ちからに なるに ちがいありません。",
+        z: "一个人的力量也许很小，但只要大家一起做，一定会变成巨大的力量。",
+        b: { a: "に違いありません", k: "にちがいありません", h: "一定是……" },
+        g: "～に違いない（一定是）· ～ば（只要）" },
+      { j: "日本では、ごみを種類ごとに分けて出すのが普通です。",
+        k: "にほんでは、ごみを しゅるいごとに わけて だすのが ふつうです。",
+        z: "在日本，把垃圾按种类分开丢弃是很平常的事。",
+        b: { a: "ごとに", k: "ごとに", h: "每……" },
+        g: "～ごとに（每…）· ～のが普通だ（…是常态）" },
+      { j: "燃えるごみのうち、生ごみは水を切ってから出します。",
+        k: "もえるごみの うち、なまごみは みずを きってから だします。",
+        z: "可燃垃圾当中，厨余垃圾要先把水沥干再扔。",
+        b: { a: "うち", k: "うち", h: "……之中" },
+        g: "～のうち（…之中）· ～てから（之后）" },
+      { j: "学生として、まず身の回りのことから始めたいと思います。",
+        k: "がくせいとして、まず みのまわりの ことから はじめたいと おもいます。",
+        z: "作为学生，我想先从身边的事做起。",
+        b: { a: "として", k: "として", h: "作为……" },
+        g: "～として（作为）· ～から始める（从…开始）" },
+      { j: "私の家では、電気をこまめに消すようにしています。",
+        k: "わたしの いえでは、でんきを こまめに けすようにしています。",
+        z: "我家尽量随手关灯。",
+        g: "～ようにしている（坚持做到）" },
+      { j: "こうした小さな努力が、将来の地球を守ると信じています。",
+        k: "こうした ちいさな どりょくが、しょうらいの ちきゅうを まもると しんじています。",
+        z: "我相信这样的小小努力会守护未来的地球。",
+        g: "～と信じている（相信…）" }
+    ],
+    q: [
+      { q: "日本では、ごみはどうしますか。", o: ["全部一緒に出す", "種類ごとに分けて出す", "水に流す"], a: 1, z: "「ごみを種類ごとに分けて出すのが普通です」。" },
+      { q: "生ごみはどう出しますか。", o: ["そのまま出す", "水を切ってから出す", "燃やしてから出す"], a: 1, z: "「生ごみは水を切ってから出します」——厨余垃圾要先沥干水。" },
+      { q: "この文章で筆者が言いたいことは何ですか。", o: ["一人の力では何もできない", "小さな努力の積み重ねが大切だ", "国が全部やるべきだ"], a: 1, z: "「一人の力は小さいかもしれませんが…」以及最后一句都指向「小小的努力累积起来很重要」。" }
+    ]
+  },
+  {
+    id: "rd-n3-6", lv: "N3", t: "働き方の変化", zh: "工作方式的变化",
+    s: [
+      { j: "最近、日本の働き方は大きく変わってきています。",
+        k: "さいきん、にほんの はたらきかたは おおきく かわってきています。",
+        z: "最近，日本的工作方式正在发生很大变化。",
+        g: "～てくる（逐渐…起来）" },
+      { j: "昔は、一つの会社で定年まで働くのが当たり前とされていました。",
+        k: "むかしは、ひとつの かいしゃで ていねんまで はたらくのが あたりまえと されていました。",
+        z: "过去，在一家公司工作到退休被认为是理所当然的。",
+        b: { a: "とされていました", k: "とされていました", h: "被认为……" },
+        g: "～とされる（被认为）· ～まで（到…为止）" },
+      { j: "しかし今は、転職を繰り返す人も珍しくありません。",
+        k: "しかし いまは、てんしょくを くりかえす ひとも めずらしくありません。",
+        z: "但现在，反复跳槽的人也不稀奇了。",
+        g: "～も珍しくない（…也不稀奇，双重否定）" },
+      { j: "会社によって制度は違いますが、在宅勤務を取り入れる所が増えました。",
+        k: "かいしゃによって せいどは ちがいますが、ざいたくきんむを とりいれる ところが ふえました。",
+        z: "制度因公司而异，但采用居家办公的地方增多了。",
+        b: { a: "によって", k: "によって", h: "因……而异" },
+        g: "～によって（因…不同）· ～を取り入れる（引进、采用）" },
+      { j: "在宅勤務は楽だといっても、家と仕事の区別がつきにくいという問題もあります。",
+        k: "ざいたくきんむは らくだと いっても、いえと しごとの くべつが つきにくいという もんだいも あります。",
+        z: "虽说居家办公轻松，但也有难以区分家庭和工作的问题。",
+        b: { a: "といっても", k: "といっても", h: "虽说……" },
+        g: "～といっても（虽说）· ～にくい（难以…）" },
+      { j: "大切なのは、自分に合った働き方を見つけることではないでしょうか。",
+        k: "たいせつなのは、じぶんに あった はたらきかたを みつけることでは ないでしょうか。",
+        z: "重要的是找到适合自己的工作方式，不是吗？",
+        g: "～のではないでしょうか（委婉的主张）· ～に合った（适合…的）" },
+      { j: "働く時間より、仕事の内容を重視する人が増えているようです。",
+        k: "はたらく じかんより、しごとの ないようを じゅうしする ひとが ふえているようです。",
+        z: "比起工作时间，重视工作内容的人似乎在增加。",
+        b: { a: "より", k: "より", h: "比起……" },
+        g: "～より（比较）· ～ようだ（似乎）" }
+    ],
+    q: [
+      { q: "昔は何が当たり前でしたか。", o: ["転職を繰り返すこと", "一つの会社で定年まで働くこと", "在宅勤務をすること"], a: 1, z: "「一つの会社で定年まで働くのが当たり前とされていました」。" },
+      { q: "在宅勤務の問題点として挙げられているのは何ですか。", o: ["給料が安いこと", "家と仕事の区別がつきにくいこと", "通勤が大変なこと"], a: 1, z: "「家と仕事の区別がつきにくいという問題もあります」。" },
+      { q: "最近の傾向として正しいものはどれですか。", o: ["時間より仕事の内容を重視する人が増えている", "給料だけを重視する人が増えている", "転職しない人が増えている"], a: 0, z: "最后一句：「働く時間より、仕事の内容を重視する人が増えているようです」。" }
+    ]
+  },
+  {
+    id: "rd-n4-5", lv: "N4", t: "アルバイト", zh: "打工",
+    s: [
+      { j: "私は去年の夏から、駅の近くのコンビニでアルバイトをしています。",
+        k: "わたしは きょねんの なつから、えきの ちかくの コンビニで アルバイトを しています。",
+        z: "我从去年夏天开始在车站附近的便利店打工。",
+        g: "～から（开始时间）· ～ている（持续）" },
+      { j: "最初は、お客様に話しかけられても、うまく答えられませんでした。",
+        k: "さいしょは、おきゃくさまに はなしかけられても、うまく こたえられませんでした。",
+        z: "一开始，即使被客人搭话，也无法很好地应答。",
+        b: { a: "られても", k: "られても", h: "即使被……也" },
+        g: "受身形＋ても（即使被…也）" },
+      { j: "店長に教えてもらいながら、少しずつ仕事を覚えました。",
+        k: "てんちょうに おしえてもらいながら、すこしずつ しごとを おぼえました。",
+        z: "一边请店长教我，一边慢慢记住了工作内容。",
+        b: { a: "ながら", k: "ながら", h: "一边……一边……" },
+        g: "～ながら（同时进行）· ～てもらう（请人做）" },
+      { j: "レジを打つのも、品出しをするのも、今では楽しいです。",
+        k: "レジを うつのも、しなだしを するのも、いまでは たのしいです。",
+        z: "收银也好，上货也好，现在都觉得很开心。",
+        g: "～も～も（…也…也）· 今では（现在）" },
+      { j: "日本語で接客してみて、はじめて言葉の難しさが分かりました。",
+        k: "にほんごで せっきゃくしてみて、はじめて ことばの むずかしさが わかりました。",
+        z: "用日语试着接待客人之后，才第一次明白语言的难处。",
+        b: { a: "してみて", k: "してみて", h: "试着做……（之后）" },
+        g: "～てみる（试着做）· ～てはじめて（…之后才）" },
+      { j: "アルバイトのおかげで、学校では習えないことをたくさん学びました。",
+        k: "アルバイトの おかげで、がっこうでは ならえないことを たくさん まなびました。",
+        z: "多亏了打工，学到了很多在学校里学不到的东西。",
+        b: { a: "おかげで", k: "おかげで", h: "多亏……" },
+        g: "～おかげで（多亏）· ～ないこと（学不到的…）" }
+    ],
+    q: [
+      { q: "どこでアルバイトをしていますか。", o: ["駅の近くのコンビニ", "学校の近くのスーパー", "家の近くのレストラン"], a: 0, z: "第一句：「駅の近くのコンビニでアルバイトをしています」。" },
+      { q: "最初はどうでしたか。", o: ["すぐに仕事を覚えた", "うまく答えられなかった", "アルバイトをやめた"], a: 1, z: "「最初は…うまく答えられませんでした」。" },
+      { q: "アルバイトをして、何が分かりましたか。", o: ["お金の大切さ", "言葉の難しさ", "仕事の楽しさだけ"], a: 1, z: "「日本語で接客してみて、はじめて言葉の難しさが分かりました」。" }
+    ]
+  },
+  {
+    id: "rd-n4-6", lv: "N4", t: "健康のために", zh: "为了健康",
+    s: [
+      { j: "最近、運動不足だと感じている人が増えています。",
+        k: "さいきん、うんどうぶそくだと かんじている ひとが ふえています。",
+        z: "最近，感觉运动不足的人在增多。",
+        g: "～と感じる（觉得）· ～が増えている" },
+      { j: "私も以前は、一日中パソコンの前に座りっぱなしでした。",
+        k: "わたしも いぜんは、いちにちじゅう パソコンの まえに すわりっぱなしでした。",
+        z: "我以前也是一整天坐在电脑前不动。",
+        b: { a: "っぱなし", k: "っぱなし", h: "一直保持……的状态" },
+        g: "～っぱなし（保持某状态不管）" },
+      { j: "そこで、毎朝三十分歩くことにしました。",
+        k: "そこで、まいあさ さんじゅっぷん あるくことに しました。",
+        z: "于是，我决定每天早上走三十分钟。",
+        b: { a: "ことにしました", k: "ことにしました", h: "决定……（自己下决心）" },
+        g: "～ことにする（自己决定）· そこで（于是）" },
+      { j: "食べすぎないようにして、野菜を多く取るようにしています。",
+        k: "たべすぎないようにして、やさいを おおく とるようにしています。",
+        z: "注意不吃太多，尽量多摄取蔬菜。",
+        b: { a: "すぎない", k: "すぎない", h: "不过度……" },
+        g: "～すぎる（过度）· ～ようにする（尽量做到）" },
+      { j: "続けるのは大変ですが、週に一度は体重を量るようにしています。",
+        k: "つづけるのは たいへんですが、しゅうに いちどは たいじゅうを はかるようにしています。",
+        z: "坚持下来很难，但我尽量每周量一次体重。",
+        g: "～のは大変だ（做…很辛苦）· ～ようにしている" },
+      { j: "無理をしないで、自分のペースで続けるほうがいいと思います。",
+        k: "むりを しないで、じぶんの ペースで つづける ほうが いいと おもいます。",
+        z: "我认为不要勉强，按自己的节奏坚持下去比较好。",
+        b: { a: "ほうがいい", k: "ほうがいい", h: "…比较好，最好…" },
+        g: "～ないで（不…而）· ～ほうがいい（建议）" }
+    ],
+    q: [
+      { q: "「私」は以前、どんな生活をしていましたか。", o: ["毎日運動していた", "一日中パソコンの前に座っていた", "外で働いていた"], a: 1, z: "「一日中パソコンの前に座りっぱなしでした」。" },
+      { q: "毎朝何をすることにしましたか。", o: ["走る", "歩く", "泳ぐ"], a: 1, z: "「毎朝三十分歩くことにしました」——是走路，不是跑步。" },
+      { q: "筆者はどんな考えを持っていますか。", o: ["無理をしてでも続けるべきだ", "自分のペースで続けたほうがいい", "運動は必要ない"], a: 1, z: "最后一句：「無理をしないで、自分のペースで続けるほうがいいと思います」。" }
+    ]
+  },
+  {
+    id: "rd-n4-7", lv: "N4", t: "引っ越し", zh: "搬家",
+    s: [
+      { j: "来月、新しいアパートに引っ越すことになりました。",
+        k: "らいげつ、あたらしい アパートに ひっこすことに なりました。",
+        z: "下个月要搬到新公寓了。",
+        b: { a: "ことになりました", k: "ことになりました", h: "（客观）决定了……" },
+        g: "～ことになる（客观决定）" },
+      { j: "今の部屋は駅から遠いので、前から引っ越したいと思っていました。",
+        k: "いまの へやは えきから とおいので、まえから ひっこしたいと おもっていました。",
+        z: "现在的房子离车站远，所以我一直想搬家。",
+        g: "～ので（原因）· 前から～と思っていた（一直想）" },
+      { j: "新しい部屋は、日当たりがよくて、家賃も今より安いです。",
+        k: "あたらしい へやは、ひあたりが よくて、やちんも いまより やすいです。",
+        z: "新房子采光好，房租也比现在便宜。",
+        b: { a: "より", k: "より", h: "比……" },
+        g: "～より（比较）· ～くて（并列）" },
+      { j: "引っ越しの前に、いらない物を捨てておくつもりです。",
+        k: "ひっこしの まえに、いらない ものを すてておく つもりです。",
+        z: "搬家前打算把不要的东西先扔掉。",
+        b: { a: "ておく", k: "ておく", h: "事先做好……" },
+        g: "～ておく（预先做）· ～つもりだ（打算）" },
+      { j: "荷物が多すぎて、一日では終わりそうにありません。",
+        k: "にもつが おおすぎて、いちにちでは おわりそうに ありません。",
+        z: "行李太多，一天好像搬不完。",
+        b: { a: "そうにありません", k: "そうにありません", h: "看样子不会……" },
+        g: "～すぎる（过度）· ～そうにない（看样子不会）" },
+      { j: "友達に手伝ってもらえるので、少し安心しています。",
+        k: "ともだちに てつだってもらえるので、すこし あんしんしています。",
+        z: "因为能请朋友帮忙，稍微放心了一些。",
+        g: "～てもらえる（能请人做）" }
+    ],
+    q: [
+      { q: "どうして引っ越しますか。", o: ["今の部屋が駅から遠いから", "家賃が高くなったから", "仕事が変わったから"], a: 0, z: "「今の部屋は駅から遠いので、前から引っ越したいと思っていました」。" },
+      { q: "新しい部屋はどうですか。", o: ["日当たりがよくて家賃も安い", "駅から遠い", "古くて狭い"], a: 0, z: "「日当たりがよくて、家賃も今より安いです」。" },
+      { q: "引っ越しの前に何をしますか。", o: ["友達を呼ぶ", "いらない物を捨てておく", "部屋を掃除する"], a: 1, z: "「いらない物を捨てておくつもりです」。" }
+    ]
+  },
+  {
+    id: "rd-n4-8", lv: "N4", t: "電話のマナー", zh: "电话礼仪",
+    s: [
+      { j: "日本の会社では、電話の受け答えがとても大切だと言われています。",
+        k: "にほんの かいしゃでは、でんわの うけこたえが とても たいせつだと いわれています。",
+        z: "据说在日本的职场，接电话的应对非常重要。",
+        b: { a: "と言われています", k: "といわれています", h: "据说……" },
+        g: "～と言われている（据说）" },
+      { j: "電話が鳴ったら、三回以内に出るのがいいとされています。",
+        k: "でんわが なったら、さんかい いないに でるのが いいと されています。",
+        z: "一般认为是电话响三声之内接起来比较好。",
+        b: { a: "とされています", k: "とされています", h: "被认为是……" },
+        g: "～とされている（被认为）· ～たら（…的话）" },
+      { j: "相手の名前を確認してから、用件をうかがいます。",
+        k: "あいての なまえを かくにんしてから、ようけんを うかがいます。",
+        z: "先确认对方姓名，再询问事由。",
+        g: "～てから（之后）· うかがう（「聞く」的自谦语）" },
+      { j: "伝言をお願いされたときは、必ずメモを取ります。",
+        k: "でんごんを おねがいされたときは、かならず メモを とります。",
+        z: "被请求留言时，一定会做记录。",
+        b: { a: "された", k: "された", h: "被……（被动）" },
+        g: "受身形 · ～とき（…的时候）" },
+      { j: "分からないことは、勝手に判断しないで、すぐ先輩に聞くようにしています。",
+        k: "わからないことは、かってに はんだんしないで、すぐ せんぱいに きくようにしています。",
+        z: "不懂的事不擅自判断，尽量马上问前辈。",
+        b: { a: "ようにしています", k: "ようにしています", h: "尽量做到……" },
+        g: "～ないで（不…而）· ～ようにしている（坚持做到）" },
+      { j: "電話のマナーは、相手への思いやりから生まれるものだと思います。",
+        k: "でんわの マナーは、あいてへの おもいやりから うまれるものだと おもいます。",
+        z: "我认为电话礼仪源自对他人的体谅。",
+        g: "～から生まれる（从…产生）· ～ものだ（本质上是…）" }
+    ],
+    q: [
+      { q: "電話が鳴ったら、どうするのがいいとされていますか。", o: ["すぐに出る", "三回以内に出る", "出ないでおく"], a: 1, z: "「三回以内に出るのがいいとされています」——注意「すぐ」和「三回以内」是两回事。" },
+      { q: "伝言をお願いされたときは、どうしますか。", o: ["すぐ忘れる", "必ずメモを取る", "後で聞き返す"], a: 1, z: "「必ずメモを取ります」。" },
+      { q: "分からないことは、どうしていますか。", o: ["自分で判断する", "すぐ先輩に聞く", "無視する"], a: 1, z: "「勝手に判断しないで、すぐ先輩に聞くようにしています」。" }
+    ]
   }
 ];
 
@@ -5217,7 +5584,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   }
 
   /* 播放真人音：候选依次尝试，全程只回落一次，杜绝与 TTS 重叠串台 */
-  function playHuman(cands, fallback, txt) {
+  function playHuman(cands, fallback, txt, mul) {
     if (!cands || !cands.length) { fallback(); return; }
     const url = cands.shift();
     let a;
@@ -5228,13 +5595,13 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const fallbackOnce = function () {
       if (settled) return;
       settled = true; clear();
-      if (cands.length) playHuman(cands, fallback, txt); else fallback();
+      if (cands.length) playHuman(cands, fallback, txt, mul); else fallback();
     };
     // 未缓存且允许兜底时，2.5 秒还没出声就先用 TTS（音频继续后台加载，下次即命中缓存）
     if (txt && (S.settings.audioMode || "auto") === "auto") {
       isCached(url).then(function (hit) {
         if (!hit && !settled) {
-          timer = setTimeout(function () { if (settled) return; settled = true; tts(txt); }, 2500);
+          timer = setTimeout(function () { if (settled) return; settled = true; tts(txt, mul); }, 2500);
         }
       });
     }
@@ -5242,20 +5609,22 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     a.onended = function () { a.onended = null; };
     a.onerror = function () { clear(); fallbackOnce(); };
     a.onstalled = function () { clear(); fallbackOnce(); };
-    a.playbackRate = S.settings.humanRate || 1;
+    a.playbackRate = (S.settings.humanRate || 1) * (mul || 1);
     a.src = url;
     try { a.load(); } catch (e) {}
     const p = a.play();
     // 注意：play() 的 reject（自动播放拦截等）不能再触发 fallback，否则会与 TTS 重叠
     if (p && p.catch) p.catch(function () {});
   }
-  function tts(txt) {
+  // mul = 语速倍率（1 正常，<1 更慢）。用显式参数而不是临时改全局设置——
+  // 临时改设置会在朗读未结束时被下一次朗读串掉，也会漏掉真人音路径。
+  function tts(txt, mul) {
     try {
       if (!window.speechSynthesis || !txt) return;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(txt);
       u.lang = "ja-JP";
-      u.rate = S.settings.ttsRate || 0.9;
+      u.rate = (S.settings.ttsRate || 0.9) * (mul || 1);
       const v = bestVoice();
       if (!v) {
         // 关键：没有日语语音就绝不朗读，否则系统会用中文语音念日语 —— 这就是「串台」
@@ -5271,20 +5640,22 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   }
   let NO_JA_WARNED = false;
   /* speak(txt, opt) —— opt: { kanji, kana } 提供时优先播真人发音 */
+  const SLOW_RATE = 0.7;               // 慢速倍率（听力训练用）
   function speak(txt, opt) {
     opt = opt || {};
+    const mul = opt.mul || 1;
     const mode = S.settings.audioMode || "auto";
     if (mode !== "tts" && opt.kana) {
       const c = humanCandidates(opt.kanji, opt.kana);
       if (c.length) {
         playHuman(c, function () {
-          if (mode !== "human") tts(txt); else toast("该词暂无真人发音（可切「自动」用 TTS 兜底）");
-        }, txt);
+          if (mode !== "human") tts(txt, mul); else toast("该词暂无真人发音（可切「自动」用 TTS 兜底）");
+        }, txt, mul);
         return;
       }
       if (mode === "human") { toast("该词暂无真人发音"); return; }
     }
-    tts(txt);
+    tts(txt, mul);
   }
   // 后台预热下一张卡片（刷卡时几乎无感）
   function prefetchNext() {
@@ -5714,7 +6085,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (!v.w || !withKana) return '<div class="cfront jp">' + base + "</div>";
     return '<div class="cfront jp"><ruby>' + base + "<rt>" + esc(v.k) + "</rt></ruby></div>";
   }
-  function sayWord(v) { if (v) speak(v.k, { kanji: v.w, kana: v.k }); }
+  function sayWord(v, slow) { if (v) speak(v.k, { kanji: v.w, kana: v.k, mul: slow ? SLOW_RATE : 1 }); }
   const CARD_MODES = [["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
@@ -5741,7 +6112,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (mode === "listen") {
       frontBody = '<button class="bigsay" id="vsay3" title="重听（S）">🔊</button>'
         + '<div class="chint">听发音 → 想出<b>这个词本身 + 它的意思</b>'
-        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>";
+        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>"
+        + '<div class="slowrow"><button class="chip sm" id="vsay4" title="慢速重听，听清后再回到正常速度">🐢 慢速重听</button></div>';
     } else if (mode === "mean") {
       frontBody = '<div class="cmean big">' + esc(v.z) + '</div>'
         + '<div class="chint">看着中文 → 想出<b>日文怎么写、怎么读</b></div>';
@@ -6045,14 +6417,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   }
   function playWord(v, slow) {
     if (!v) return;
-    if (slow) {
-      const old = S.settings.ttsRate;
-      S.settings.ttsRate = 0.6;
-      tts(v.k);
-      setTimeout(function () { S.settings.ttsRate = old; }, 900);
-      return;
-    }
-    speak(v.k, { kanji: v.w, kana: v.k });
+    speak(v.k, { kanji: v.w, kana: v.k, mul: slow ? SLOW_RATE : 1 });
   }
   function rateOf(r, w) { return (r + w) ? Math.round(r / (r + w) * 100) : 0; }
 
@@ -6213,19 +6578,20 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     S.reading[a.id] = { blank: { r: rd.br, w: rd.bw }, quiz: { r: rd.qr, w: rd.qw }, at: Date.now() };
     save();
   }
-  function saySentence(a, i) {
+  function saySentence(a, i, slow) {
     const s = a.s[i];
-    if (s) tts(s.j);
+    if (s) speak(s.j, { mul: slow ? SLOW_RATE : 1 });
   }
   // 通读全文：逐句朗读，按字数估算间隔
   let readingTimer = null;
-  function playAll(a) {
+  function playAll(a, slow) {
     if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; return; }
+    const mul = slow ? SLOW_RATE : 1;
     let i = 0;
     const step = function () {
       if (i >= a.s.length) { readingTimer = null; return; }
-      tts(a.s[i].j);
-      const dur = Math.max(1600, a.s[i].j.length * 280 + 700);
+      tts(a.s[i].j, mul);
+      const dur = Math.max(1600, (a.s[i].j.length * 280 + 700) / mul);   // 慢速时留更长间隔
       i++;
       readingTimer = setTimeout(step, dur);
     };
@@ -6293,13 +6659,15 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     let h = '<div class="chips">';
     h += '<button class="chip' + (rd.showK ? " on" : "") + '" id="rdk">显示假名</button>';
     h += '<button class="chip' + (rd.showZ ? " on" : "") + '" id="rdz">显示中文</button>';
-    h += '<button class="chip" id="rdplayall">通读全文</button>';
+    h += '<button class="chip" id="rdplayall" title="按正常速度逐句通读">🔊 通读</button>';
+    h += '<button class="chip" id="rdplayallslow" title="按慢速逐句通读（练听力）">🐢 通读（慢）</button>';
     h += '</div><div class="rart">';
     a.s.forEach(function (s, i) {
       h += '<div class="rline">';
       h += '<div class="rside">';
       h += '<span class="rnum">' + (i + 1) + '</span>';
-      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">🔊</button>';
+      h += '<button class="rsay" data-rsay="' + i + '" title="正常速度朗读">🔊</button>';
+      h += '<button class="rsay slow" data-rslow="' + i + '" title="慢速朗读（练听力）">慢</button>';
       h += '</div>';
       h += '<div class="rbody">';
       h += '<div class="rj jp">' + esc(s.j) + '</div>';
@@ -6312,7 +6680,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const bn = blanksOf(a).length;
     h += '<div class="chips"><button class="btn" data-rdstage="blank">开始填空练习（' + bn + ' 空）</button>'
       + '<button class="chip" data-rdstage="quiz">直接做理解题</button></div>';
-    h += '<p class="tip">点左边的序号可以朗读该句。假名和中文可以随时关掉，先自己读懂再打开对照。</p>';
+    h += '<p class="tip">听句子的正确练法：<b>先闭眼听 🔊 正常速度</b>，听不出来再点「慢」——慢速听清后<b>一定要回到正常速度再听一遍</b>，确认是真的听懂了而不是靠慢速才反应过来。假名和中文可以随时关掉。</p>';
     return h;
   }
   function blankStageHTML(a) {
@@ -6330,7 +6698,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const qk = s.k.split(s.b.k).join('____');
     let h = '<div class="rowbox"><span>第 <b>' + (rd.bi + 1) + '</b> / ' + bs.length + ' 空</span>'
       + '<span>正确 <b>' + rd.br + '</b></span><span>错误 <b>' + rd.bw + '</b></span>'
-      + '<button class="btn sm" id="rdplaycur">🔊 听这句</button></div>';
+      + '<button class="btn sm" id="rdplaycur">🔊 听这句</button>'
+      + '<button class="chip sm" id="rdplaycurslow" title="慢速听（练听力）">慢速</button></div>';
     h += '<div class="qbox">';
     h += '<div class="qask">填入合适的词　<span class="tip2">' + esc(s.b.h || "") + '</span></div>';
     h += '<div class="rblank jp">' + qj + '</div>';
@@ -6637,8 +7006,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (A("data-cautoplay") !== null) {
       S.settings.autoPlay = A("data-cautoplay") === "1"; save(); render(); return;
     }
-    if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3") {
-      sayWord(vs.queue[vs.idx]); return;
+    if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3" || t.id === "vsay4") {
+      sayWord(vs.queue[vs.idx], t.id === "vsay4"); return;
     }
     if (t.id === "vshow") { vs.show = true; renderCard(); return; }
     if (A("data-g")) {
@@ -6769,8 +7138,10 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     }
     if (t.id === "rdk") { rd.showK = !rd.showK; render(); return; }
     if (t.id === "rdz") { rd.showZ = !rd.showZ; render(); return; }
-    if (A("data-rsay")) {
-      if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10));
+    if (A("data-rsay") !== null || A("data-rslow") !== null) {
+      const slow = A("data-rslow") !== null;
+      const idx = parseInt(slow ? A("data-rslow") : A("data-rsay"), 10);
+      if (rd.cur) saySentence(rd.cur, idx, slow);
       if (t.classList) {
         t.classList.add("playing");
         setTimeout(function () { if (t.classList) t.classList.remove("playing"); }, 900);
@@ -6778,8 +7149,9 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       return;
     }
     if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
-    if (t.id === "rdplaycur") {
-      if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi]); }
+    if (t.id === "rdplayallslow") { if (rd.cur) playAll(rd.cur, true); return; }
+    if (t.id === "rdplaycur" || t.id === "rdplaycurslow") {
+      if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi], t.id === "rdplaycurslow"); }
       return;
     }
     if (t.id === "rdrestart") {
@@ -7100,7 +7472,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
     LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);

@@ -576,7 +576,7 @@
   }
 
   /* 播放真人音：候选依次尝试，全程只回落一次，杜绝与 TTS 重叠串台 */
-  function playHuman(cands, fallback, txt) {
+  function playHuman(cands, fallback, txt, mul) {
     if (!cands || !cands.length) { fallback(); return; }
     const url = cands.shift();
     let a;
@@ -587,13 +587,13 @@
     const fallbackOnce = function () {
       if (settled) return;
       settled = true; clear();
-      if (cands.length) playHuman(cands, fallback, txt); else fallback();
+      if (cands.length) playHuman(cands, fallback, txt, mul); else fallback();
     };
     // 未缓存且允许兜底时，2.5 秒还没出声就先用 TTS（音频继续后台加载，下次即命中缓存）
     if (txt && (S.settings.audioMode || "auto") === "auto") {
       isCached(url).then(function (hit) {
         if (!hit && !settled) {
-          timer = setTimeout(function () { if (settled) return; settled = true; tts(txt); }, 2500);
+          timer = setTimeout(function () { if (settled) return; settled = true; tts(txt, mul); }, 2500);
         }
       });
     }
@@ -601,20 +601,22 @@
     a.onended = function () { a.onended = null; };
     a.onerror = function () { clear(); fallbackOnce(); };
     a.onstalled = function () { clear(); fallbackOnce(); };
-    a.playbackRate = S.settings.humanRate || 1;
+    a.playbackRate = (S.settings.humanRate || 1) * (mul || 1);
     a.src = url;
     try { a.load(); } catch (e) {}
     const p = a.play();
     // 注意：play() 的 reject（自动播放拦截等）不能再触发 fallback，否则会与 TTS 重叠
     if (p && p.catch) p.catch(function () {});
   }
-  function tts(txt) {
+  // mul = 语速倍率（1 正常，<1 更慢）。用显式参数而不是临时改全局设置——
+  // 临时改设置会在朗读未结束时被下一次朗读串掉，也会漏掉真人音路径。
+  function tts(txt, mul) {
     try {
       if (!window.speechSynthesis || !txt) return;
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(txt);
       u.lang = "ja-JP";
-      u.rate = S.settings.ttsRate || 0.9;
+      u.rate = (S.settings.ttsRate || 0.9) * (mul || 1);
       const v = bestVoice();
       if (!v) {
         // 关键：没有日语语音就绝不朗读，否则系统会用中文语音念日语 —— 这就是「串台」
@@ -630,20 +632,22 @@
   }
   let NO_JA_WARNED = false;
   /* speak(txt, opt) —— opt: { kanji, kana } 提供时优先播真人发音 */
+  const SLOW_RATE = 0.7;               // 慢速倍率（听力训练用）
   function speak(txt, opt) {
     opt = opt || {};
+    const mul = opt.mul || 1;
     const mode = S.settings.audioMode || "auto";
     if (mode !== "tts" && opt.kana) {
       const c = humanCandidates(opt.kanji, opt.kana);
       if (c.length) {
         playHuman(c, function () {
-          if (mode !== "human") tts(txt); else toast("该词暂无真人发音（可切「自动」用 TTS 兜底）");
-        }, txt);
+          if (mode !== "human") tts(txt, mul); else toast("该词暂无真人发音（可切「自动」用 TTS 兜底）");
+        }, txt, mul);
         return;
       }
       if (mode === "human") { toast("该词暂无真人发音"); return; }
     }
-    tts(txt);
+    tts(txt, mul);
   }
   // 后台预热下一张卡片（刷卡时几乎无感）
   function prefetchNext() {
@@ -1073,7 +1077,7 @@
     if (!v.w || !withKana) return '<div class="cfront jp">' + base + "</div>";
     return '<div class="cfront jp"><ruby>' + base + "<rt>" + esc(v.k) + "</rt></ruby></div>";
   }
-  function sayWord(v) { if (v) speak(v.k, { kanji: v.w, kana: v.k }); }
+  function sayWord(v, slow) { if (v) speak(v.k, { kanji: v.w, kana: v.k, mul: slow ? SLOW_RATE : 1 }); }
   const CARD_MODES = [["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
@@ -1100,7 +1104,8 @@
     if (mode === "listen") {
       frontBody = '<button class="bigsay" id="vsay3" title="重听（S）">🔊</button>'
         + '<div class="chint">听发音 → 想出<b>这个词本身 + 它的意思</b>'
-        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>";
+        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>"
+        + '<div class="slowrow"><button class="chip sm" id="vsay4" title="慢速重听，听清后再回到正常速度">🐢 慢速重听</button></div>';
     } else if (mode === "mean") {
       frontBody = '<div class="cmean big">' + esc(v.z) + '</div>'
         + '<div class="chint">看着中文 → 想出<b>日文怎么写、怎么读</b></div>';
@@ -1404,14 +1409,7 @@
   }
   function playWord(v, slow) {
     if (!v) return;
-    if (slow) {
-      const old = S.settings.ttsRate;
-      S.settings.ttsRate = 0.6;
-      tts(v.k);
-      setTimeout(function () { S.settings.ttsRate = old; }, 900);
-      return;
-    }
-    speak(v.k, { kanji: v.w, kana: v.k });
+    speak(v.k, { kanji: v.w, kana: v.k, mul: slow ? SLOW_RATE : 1 });
   }
   function rateOf(r, w) { return (r + w) ? Math.round(r / (r + w) * 100) : 0; }
 
@@ -1572,19 +1570,20 @@
     S.reading[a.id] = { blank: { r: rd.br, w: rd.bw }, quiz: { r: rd.qr, w: rd.qw }, at: Date.now() };
     save();
   }
-  function saySentence(a, i) {
+  function saySentence(a, i, slow) {
     const s = a.s[i];
-    if (s) tts(s.j);
+    if (s) speak(s.j, { mul: slow ? SLOW_RATE : 1 });
   }
   // 通读全文：逐句朗读，按字数估算间隔
   let readingTimer = null;
-  function playAll(a) {
+  function playAll(a, slow) {
     if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; return; }
+    const mul = slow ? SLOW_RATE : 1;
     let i = 0;
     const step = function () {
       if (i >= a.s.length) { readingTimer = null; return; }
-      tts(a.s[i].j);
-      const dur = Math.max(1600, a.s[i].j.length * 280 + 700);
+      tts(a.s[i].j, mul);
+      const dur = Math.max(1600, (a.s[i].j.length * 280 + 700) / mul);   // 慢速时留更长间隔
       i++;
       readingTimer = setTimeout(step, dur);
     };
@@ -1652,13 +1651,15 @@
     let h = '<div class="chips">';
     h += '<button class="chip' + (rd.showK ? " on" : "") + '" id="rdk">显示假名</button>';
     h += '<button class="chip' + (rd.showZ ? " on" : "") + '" id="rdz">显示中文</button>';
-    h += '<button class="chip" id="rdplayall">通读全文</button>';
+    h += '<button class="chip" id="rdplayall" title="按正常速度逐句通读">🔊 通读</button>';
+    h += '<button class="chip" id="rdplayallslow" title="按慢速逐句通读（练听力）">🐢 通读（慢）</button>';
     h += '</div><div class="rart">';
     a.s.forEach(function (s, i) {
       h += '<div class="rline">';
       h += '<div class="rside">';
       h += '<span class="rnum">' + (i + 1) + '</span>';
-      h += '<button class="rsay" data-rsay="' + i + '" title="朗读这句">🔊</button>';
+      h += '<button class="rsay" data-rsay="' + i + '" title="正常速度朗读">🔊</button>';
+      h += '<button class="rsay slow" data-rslow="' + i + '" title="慢速朗读（练听力）">慢</button>';
       h += '</div>';
       h += '<div class="rbody">';
       h += '<div class="rj jp">' + esc(s.j) + '</div>';
@@ -1671,7 +1672,7 @@
     const bn = blanksOf(a).length;
     h += '<div class="chips"><button class="btn" data-rdstage="blank">开始填空练习（' + bn + ' 空）</button>'
       + '<button class="chip" data-rdstage="quiz">直接做理解题</button></div>';
-    h += '<p class="tip">点左边的序号可以朗读该句。假名和中文可以随时关掉，先自己读懂再打开对照。</p>';
+    h += '<p class="tip">听句子的正确练法：<b>先闭眼听 🔊 正常速度</b>，听不出来再点「慢」——慢速听清后<b>一定要回到正常速度再听一遍</b>，确认是真的听懂了而不是靠慢速才反应过来。假名和中文可以随时关掉。</p>';
     return h;
   }
   function blankStageHTML(a) {
@@ -1689,7 +1690,8 @@
     const qk = s.k.split(s.b.k).join('____');
     let h = '<div class="rowbox"><span>第 <b>' + (rd.bi + 1) + '</b> / ' + bs.length + ' 空</span>'
       + '<span>正确 <b>' + rd.br + '</b></span><span>错误 <b>' + rd.bw + '</b></span>'
-      + '<button class="btn sm" id="rdplaycur">🔊 听这句</button></div>';
+      + '<button class="btn sm" id="rdplaycur">🔊 听这句</button>'
+      + '<button class="chip sm" id="rdplaycurslow" title="慢速听（练听力）">慢速</button></div>';
     h += '<div class="qbox">';
     h += '<div class="qask">填入合适的词　<span class="tip2">' + esc(s.b.h || "") + '</span></div>';
     h += '<div class="rblank jp">' + qj + '</div>';
@@ -1996,8 +1998,8 @@
     if (A("data-cautoplay") !== null) {
       S.settings.autoPlay = A("data-cautoplay") === "1"; save(); render(); return;
     }
-    if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3") {
-      sayWord(vs.queue[vs.idx]); return;
+    if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3" || t.id === "vsay4") {
+      sayWord(vs.queue[vs.idx], t.id === "vsay4"); return;
     }
     if (t.id === "vshow") { vs.show = true; renderCard(); return; }
     if (A("data-g")) {
@@ -2128,8 +2130,10 @@
     }
     if (t.id === "rdk") { rd.showK = !rd.showK; render(); return; }
     if (t.id === "rdz") { rd.showZ = !rd.showZ; render(); return; }
-    if (A("data-rsay")) {
-      if (rd.cur) saySentence(rd.cur, parseInt(A("data-rsay"), 10));
+    if (A("data-rsay") !== null || A("data-rslow") !== null) {
+      const slow = A("data-rslow") !== null;
+      const idx = parseInt(slow ? A("data-rslow") : A("data-rsay"), 10);
+      if (rd.cur) saySentence(rd.cur, idx, slow);
       if (t.classList) {
         t.classList.add("playing");
         setTimeout(function () { if (t.classList) t.classList.remove("playing"); }, 900);
@@ -2137,8 +2141,9 @@
       return;
     }
     if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
-    if (t.id === "rdplaycur") {
-      if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi]); }
+    if (t.id === "rdplayallslow") { if (rd.cur) playAll(rd.cur, true); return; }
+    if (t.id === "rdplaycur" || t.id === "rdplaycurslow") {
+      if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi], t.id === "rdplaycurslow"); }
       return;
     }
     if (t.id === "rdrestart") {
@@ -2459,7 +2464,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
     LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
