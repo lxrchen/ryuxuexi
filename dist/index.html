@@ -326,6 +326,36 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   .kcell .h{font-size:18px}
 }
 
+/* 已学词 · 随手翻看（浏览式，不是刷卡式） */
+.svbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.svq{flex:1;min-width:170px}
+.svlist{margin-top:10px}
+.svrow{display:flex;gap:12px;align-items:flex-start;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:12px;padding:11px 14px;margin-bottom:8px;transition:.15s}
+.svrow:hover{border-color:var(--bd2)}
+.svleft{flex:1;min-width:0}
+.svword{font-size:17px;line-height:1.6;color:var(--tx);font-family:var(--jp)}
+.svword rt{font-size:10.5px;color:var(--tx3)}
+.svzh{font-size:13px;line-height:1.7;color:var(--tx2);margin-top:3px}
+.svzh.blind{filter:blur(5px);cursor:pointer;user-select:none;-webkit-user-select:none}
+.svzh.blind:hover{filter:blur(3.5px)}
+.svmeta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;
+  font-size:11.5px;color:var(--tx3)}
+.svtag{border:1px solid var(--bd2);border-radius:10px;padding:1px 8px;font-size:11px;color:var(--tx3);white-space:nowrap}
+.svtag.ok{color:var(--ac2);border-color:var(--ac2)}
+.svtag.weak{color:var(--warn);border-color:var(--warn)}
+.svtag.bad{color:var(--err);border-color:var(--err)}
+.svsay{flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
+  color:var(--tx2);font-size:14px;cursor:pointer;transition:.15s;font-family:inherit}
+.svsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
+.svempty{text-align:center;padding:34px 16px;color:var(--tx3);font-size:13.5px;line-height:2}
+
+@media(max-width:640px){
+  .svrow{padding:10px 12px;gap:9px}
+  .svword{font-size:16px}
+  .svsay{width:30px;height:30px}
+}
+
 </style>
 </head>
 <body>
@@ -343,6 +373,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
     <a href="#/read">文章精读</a>
     <a href="#/textbook">教材大纲</a>
     <a href="#/dash">仪表盘</a>
+    <a href="#/studied">已学词</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>
   </nav>
@@ -350,7 +381,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-18 16:58
+  <br>版本：2026-09-18 17:18
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -6618,6 +6649,197 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     return h;
   }
 
+  /* ---------- 11a2. 视图：已学词（随手翻看） ---------- */
+  /* 与「复习」的区别：复习是刷卡（要评分、进 SRS），这里是浏览（扫一眼、查词、听发音）。
+     与「错词本」形态一致（列表式），但范围是「全部学过的词」，且不看到期时间。 */
+  const sv = { lv: "", src: "", lesson: 0, st: "all", sort: "due", q: "", limit: 80, hideZ: false };
+  const SV_STATES = [["all", "全部"], ["learning", "巩固中"], ["weak", "待巩固"], ["solid", "学得牢"], ["wrong", "错词"]];
+  const SV_SORTS = [["due", "最久没复习"], ["weak", "最不熟"], ["lesson", "按课次"], ["kana", "按五十音"]];
+  let svRevealed = {};        // 遮蔽模式下已点开释义的词 id
+  function wrongSetOf() { const m = {}; S.wrong.forEach(function (id) { m[id] = 1; }); return m; }
+  function svMatch(v, c, wset) {
+    const learning = isLearning(c);
+    if (sv.st === "learning" && !learning) return false;
+    if (sv.st === "wrong" && !wset[v.id]) return false;
+    if (sv.st === "solid" && (learning || (c.n || 0) < 4)) return false;
+    if (sv.st === "weak" && (learning || (c.n || 0) >= 4)) return false;
+    if (sv.q) {
+      const q = sv.q.toLowerCase();
+      if ((v.k + " " + (v.w || "") + " " + (v.z || "") + " " + (v.p || "")).toLowerCase().indexOf(q) < 0) return false;
+    }
+    return true;
+  }
+  /* 已学词行（带卡片状态），按当前筛选与排序。
+     注意：只认 S.cards 里有的词 —— 没学过的一律不出现。 */
+  function learnedRows() {
+    const wset = wrongSetOf();
+    const out = [];
+    LEVELS.forEach(function (L) {
+      if (sv.lv && L !== sv.lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, sv.src, sv.lesson)) return;
+        const c = S.cards[v.id];
+        if (!c) return;
+        if (!svMatch(v, c, wset)) return;
+        out.push({ v: v, c: c });
+      });
+    });
+    if (sv.sort === "due") out.sort(function (a, b) { return (a.c.due || 0) - (b.c.due || 0); });
+    else if (sv.sort === "weak") out.sort(function (a, b) { return (a.c.n || 0) - (b.c.n || 0); });
+    else if (sv.sort === "lesson") out.sort(function (a, b) { return (a.v.l || 0) - (b.v.l || 0); });
+    return out;                                            // "kana" = 保持词典原序
+  }
+  // 顶部统计（随级别/来源/课次变，不随状态与搜索变）
+  function learnedStats() {
+    const now = Date.now();
+    let total = 0, learning = 0, dueNow = 0;
+    LEVELS.forEach(function (L) {
+      if (sv.lv && L !== sv.lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, sv.src, sv.lesson)) return;
+        const c = S.cards[v.id];
+        if (!c) return;
+        total++;
+        if (isLearning(c)) learning++;
+        else if (c.due && c.due <= now) dueNow++;
+      });
+    });
+    return { total: total, learning: learning, dueNow: dueNow };
+  }
+  /* 各状态的词数（按钮上标数）。基数同 learnedStats，不叠加状态筛选本身。 */
+  function svCount(pred) {
+    const wset = wrongSetOf();
+    let n = 0;
+    LEVELS.forEach(function (L) {
+      if (sv.lv && L !== sv.lv) return;
+      VOCAB[L].forEach(function (v) {
+        if (!inScope(v, sv.src, sv.lesson)) return;
+        const c = S.cards[v.id];
+        if (c && pred(v, c, wset)) n++;
+      });
+    });
+    return n;
+  }
+  // 「下次复习」的人话
+  function dueLabel(c) {
+    if (isLearning(c)) return '当天巩固中';
+    const d = c.due || 0, now = Date.now();
+    if (!d) return '未安排';
+    if (d <= now) {
+      const min = Math.round((now - d) / 60000);
+      return min < 60 ? '已到期 ' + Math.max(1, min) + ' 分钟' : '已到期 ' + Math.round(min / 60) + ' 小时';
+    }
+    const hrs = (d - now) / 3600000;
+    return hrs < 24 ? '约 ' + Math.max(1, Math.round(hrs)) + ' 小时后' : '约 ' + Math.round(hrs / 24) + ' 天后';
+  }
+  function viewStudied() {
+    const rows = learnedRows();
+    const stats = learnedStats();
+    const cLearn = svCount(function (v, c) { return isLearning(c); });
+    const cWrong = svCount(function (v, c, w) { return !!w[v.id]; });
+    const cSolid = svCount(function (v, c) { return !isLearning(c) && (c.n || 0) >= 4; });
+    const cWeak = svCount(function (v, c) { return !isLearning(c) && (c.n || 0) < 4; });
+
+    let h = '<h2>已学词 · 随手翻看</h2>';
+    h += '<p class="tip">这里是你<b>学过的全部词</b>，<b>不看到期时间</b> —— 想什么时候翻就什么时候翻。'
+      + '适合扫一眼加深印象、查某个词、睡前过一遍。<b>这里不评分</b>，所以不会打乱你的复习计划。</p>';
+
+    h += '<div class="rowbox"><span>已学：<b>' + stats.total + '</b> 个</span>'
+      + (stats.learning ? '<span>巩固中：<b>' + stats.learning + '</b></span>' : '')
+      + (stats.dueNow ? '<span>该复习：<b>' + stats.dueNow + '</b></span>' : '')
+      + '<button class="btn sm" id="svtrain" title="拿当前筛选出的词去刷卡复习（会评分）">用这些词练一遍</button></div>';
+
+    h += '<div class="svbar"><input class="inp svq" id="svq" placeholder="搜假名 / 汉字 / 中文释义…" value="' + esc(sv.q) + '">'
+      + '<button class="chip' + (sv.hideZ ? " on" : "") + '" id="svblind" title="遮住所有释义，先自己回忆，点一条才显示">遮蔽释义：' + (sv.hideZ ? "开" : "关") + '</button></div>';
+
+    h += '<div class="chips">状态：';
+    const cntMap = { all: stats.total, learning: cLearn, weak: cWeak, solid: cSolid, wrong: cWrong };
+    SV_STATES.forEach(function (s) {
+      const n = cntMap[s[0]] || 0;
+      if (s[0] !== "all" && !n) return;                    // 没词的状态不占位置
+      h += '<button class="chip' + (sv.st === s[0] ? " on" : "") + '" data-svst="' + s[0] + '">' + s[1] + '（' + n + '）</button>';
+    });
+    h += '</div>';
+
+    h += '<div class="chips">级别：<button class="chip' + (sv.lv === "" ? " on" : "") + '" data-svlv="">全部</button>';
+    LEVELS.forEach(function (L) {
+      const n = (VOCAB[L] || []).filter(function (v) { return !!S.cards[v.id]; }).length;
+      if (!n) return;                                      // 没学过的级别不显示
+      h += '<button class="chip' + (sv.lv === L ? " on" : "") + '" data-svlv="' + L + '">' + L + '（' + n + '）</button>';
+    });
+    h += '</div>';
+
+    const hasBooks = !!sv.lv && booksIn(sv.lv).length > 0;
+    if (hasBooks) {
+      h += '<div class="chips">来源：<button class="chip' + (sv.src === "" ? " on" : "") + '" data-svsrc="">全部</button>'
+        + '<button class="chip' + (sv.src === "base" ? " on" : "") + '" data-svsrc="base">内置</button>';
+      booksIn(sv.lv).forEach(function (bk) {
+        const n = VOCAB[sv.lv].filter(function (v) { return v.src === bk.tag && S.cards[v.id]; }).length;
+        if (!n) return;
+        h += '<button class="chip' + (sv.src === bk.tag ? " on" : "") + '" data-svsrc="' + bk.tag + '">' + bk.name + '（' + n + '）</button>';
+      });
+      h += '</div>';
+    }
+    if (sv.lv && (!hasBooks || sv.src !== "")) {
+      h += '<div class="chips">课次：<button class="chip' + (sv.lesson === 0 ? " on" : "") + '" data-svl="">全部</button>';
+      const lessons = [];
+      VOCAB[sv.lv].forEach(function (v) {
+        if (!S.cards[v.id] || !inScope(v, sv.src, 0)) return;
+        if (v.l && lessons.indexOf(v.l) < 0) lessons.push(v.l);
+      });
+      lessons.sort(function (a, b) { return a - b; }).forEach(function (l) {
+        const isBook = sv.src && sv.src !== "base";
+        h += '<button class="chip' + (sv.lesson === l ? " on" : "") + '" data-svl="' + l + '">'
+          + (isBook ? "第" + l + "课" : (sv.lv === "N5" || sv.lv === "N4" ? "第" + l + "课" : "主题" + l)) + '</button>';
+      });
+      h += '</div>';
+    }
+
+    h += '<div class="chips">排序：';
+    SV_SORTS.forEach(function (s) {
+      h += '<button class="chip' + (sv.sort === s[0] ? " on" : "") + '" data-svsort="' + s[0] + '">' + s[1] + '</button>';
+    });
+    h += '</div>';
+
+    if (!rows.length) {
+      h += '<div class="svempty">' + (stats.total
+        ? '这个筛选下没有词<br><span class="tip">换个状态或级别看看，或把搜索词清掉</span>'
+        : '还没有学过的词<br><span class="tip">先去「学新词」建立第一批，之后这里就能随时翻看了</span><br><button class="btn" data-go="learn">去学新词</button>')
+        + '</div>';
+      return h;
+    }
+
+    const shown = rows.slice(0, sv.limit);
+    h += '<div class="svlist">';
+    shown.forEach(function (r) {
+      const v = r.v, c = r.c, n = c.n || 0;
+      const learning = isLearning(c);
+      const isWrong = S.wrong.indexOf(v.id) >= 0;
+      const tag = learning ? '<span class="svtag weak">巩固中</span>'
+        : isWrong ? '<span class="svtag bad">错词</span>'
+          : n >= 4 ? '<span class="svtag ok">学得牢</span>'
+            : '<span class="svtag">待巩固</span>';
+      const srcLab = v.custom ? "我的词库"
+        : v.book ? bookName(v.src) + " 第" + v.l + "课"
+          : (v.lv === "N5" || v.lv === "N4" ? "第" + v.l + "课" : "主题" + v.l);
+      const blind = sv.hideZ && !svRevealed[v.id];
+      h += '<div class="svrow"><div class="svleft">';
+      h += '<div class="svword jp">' + (v.w ? '<ruby>' + esc(v.w) + '<rt>' + esc(v.k) + '</rt></ruby>' : esc(v.k)) + '</div>';
+      h += '<div class="svzh' + (blind ? " blind" : "") + '"' + (blind ? ' data-svz="' + v.id + '" title="点一下显示释义"' : "") + '>' + esc(v.z) + '</div>';
+      h += '<div class="svmeta"><span class="svtag">' + v.lv + '</span><span>' + esc(srcLab) + '</span>'
+        + (v.p ? '<span>' + esc(v.p) + '</span>' : '')
+        + '<span>复习 ' + n + ' 次</span><span>' + dueLabel(c) + '</span>' + tag + '</div>';
+      h += '</div>';
+      h += '<button class="svsay" data-svsay="' + v.id + '" title="朗读">🔊</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+    if (rows.length > shown.length) {
+      h += '<div class="svbar"><button class="btn sm" id="svmore">加载更多（还有 ' + (rows.length - shown.length) + ' 个）</button></div>';
+    }
+    return h;
+  }
+
   /* ---------- 11b. 视图：我的词库（用户自定义） ---------- */
   const cst = { tab: "vocab", q: "", lv: "N5", p: "名" };
   const PARTS = ["名", "动1", "动2", "动3", "形1", "形2", "副", "连体", "叹", "助", "接", "代"];
@@ -7241,6 +7463,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     vocab: viewLearn,   // 兼容旧链接 → 学新词
     grammar: viewGrammar,
     drill: viewDrill, dash: viewDash, wrong: viewWrong, custom: viewCustom,
+    studied: viewStudied,
     dict: viewDict, trans: viewTrans, read: viewRead, textbook: viewTextbook
   };
   function render() {
@@ -7314,6 +7537,42 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (t.id === "wclear") { if (confirm("清空错词本？")) { S.wrong = []; save(); render(); } return; }
     if (t.id === "exp") { exportData(); return; }
     if (t.id === "kconf") { showConfuse(); return; }
+    /* --- 已学词页（#/studied）：筛选 / 遮蔽 / 朗读 / 拿去复习 --- */
+    if (A("data-svlv") !== null) { sv.lv = A("data-svlv") || ""; sv.src = ""; sv.lesson = 0; sv.limit = 80; render(); return; }
+    if (A("data-svsrc") !== null) { sv.src = A("data-svsrc") || ""; sv.lesson = 0; sv.limit = 80; render(); return; }
+    if (A("data-svl") !== null) { sv.lesson = parseInt(A("data-svl"), 10) || 0; sv.limit = 80; render(); return; }
+    if (A("data-svst")) { sv.st = A("data-svst"); sv.limit = 80; render(); return; }
+    if (A("data-svsort")) { sv.sort = A("data-svsort"); render(); return; }
+    if (A("data-svz") !== null) {
+      // 点开单条释义：直接改 DOM，不整体重渲染 —— 否则滚动位置会被拉回顶部
+      svRevealed[A("data-svz")] = 1;
+      const node = (t.closest && t.closest("[data-svz]")) || t;
+      if (node && node.classList) node.classList.remove("blind");
+      if (node && node.removeAttribute) node.removeAttribute("data-svz");
+      return;
+    }
+    if (A("data-svsay")) {
+      const w = vmap()[A("data-svsay")];
+      if (w) speak(w.k, { kanji: w.w, kana: w.k });
+      return;
+    }
+    if (t.id === "svblind") { sv.hideZ = !sv.hideZ; svRevealed = {}; render(); return; }
+    if (t.id === "svmore") { sv.limit += 80; render(); return; }
+    if (t.id === "svtrain") {
+      // 拿当前筛选去刷卡复习：级别/来源/课次带过去；「错词」状态则用只练错词模式
+      let L = sv.lv;
+      if (!L) {
+        L = LEVELS.filter(function (x) {
+          return (VOCAB[x] || []).some(function (v) { return !!S.cards[v.id]; });
+        })[0];
+      }
+      if (!L) { toast("还没有学过的词"); return; }
+      rs.lv = L; rs.src = sv.src; rs.lesson = sv.lesson;
+      rs.rmode = (sv.st === "wrong") ? "wrong" : "all";
+      rememberLv(rs);
+      location.hash = "#/review";
+      return;
+    }
     if (A("data-vlv")) {
       vs.lv = A("data-vlv"); vs.lesson = 0;
       // 换了级别：若原来源（教材册）不属于该级别则重置，避免筛出空队列
@@ -7596,6 +7855,15 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       const el = $("#gsearch"); if (el) { el.focus(); el.setSelectionRange(pos, pos); }
       return;
     }
+    // 已学词页的实时搜索（与语法库同一套做法：重渲染后把光标放回原位）
+    if (e.target.id === "svq") {
+      sv.q = e.target.value; sv.limit = 80;
+      const pos = e.target.selectionStart || 0;
+      render();
+      const el = $("#svq");
+      if (el) { try { el.focus(); el.setSelectionRange(pos, pos); } catch (err) {} }
+      return;
+    }
     if (e.target.id === "ttsrate") {
       S.settings.ttsRate = parseFloat(e.target.value);
       const lab = document.getElementById("ttsrateval"); if (lab) lab.textContent = e.target.value;
@@ -7822,6 +8090,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
   rebuildAll();
   globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, realSentences: realSentences, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
     studiedList: studiedList, studiedCount: studiedCount, RMODES: RMODES,
+    get sv() { return sv; }, viewStudied: viewStudied, learnedRows: learnedRows,
+    learnedStats: learnedStats, dueLabel: dueLabel, SV_STATES: SV_STATES, SV_SORTS: SV_SORTS,
     LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);

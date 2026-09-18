@@ -67,6 +67,7 @@ ${css}
     <a href="#/read">文章精读</a>
     <a href="#/textbook">教材大纲</a>
     <a href="#/dash">仪表盘</a>
+    <a href="#/studied">已学词</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>
   </nav>

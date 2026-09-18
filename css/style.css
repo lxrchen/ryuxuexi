@@ -313,3 +313,33 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   .kgrid{gap:6px}
   .kcell .h{font-size:18px}
 }
+
+/* 已学词 · 随手翻看（浏览式，不是刷卡式） */
+.svbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.svq{flex:1;min-width:170px}
+.svlist{margin-top:10px}
+.svrow{display:flex;gap:12px;align-items:flex-start;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:12px;padding:11px 14px;margin-bottom:8px;transition:.15s}
+.svrow:hover{border-color:var(--bd2)}
+.svleft{flex:1;min-width:0}
+.svword{font-size:17px;line-height:1.6;color:var(--tx);font-family:var(--jp)}
+.svword rt{font-size:10.5px;color:var(--tx3)}
+.svzh{font-size:13px;line-height:1.7;color:var(--tx2);margin-top:3px}
+.svzh.blind{filter:blur(5px);cursor:pointer;user-select:none;-webkit-user-select:none}
+.svzh.blind:hover{filter:blur(3.5px)}
+.svmeta{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;
+  font-size:11.5px;color:var(--tx3)}
+.svtag{border:1px solid var(--bd2);border-radius:10px;padding:1px 8px;font-size:11px;color:var(--tx3);white-space:nowrap}
+.svtag.ok{color:var(--ac2);border-color:var(--ac2)}
+.svtag.weak{color:var(--warn);border-color:var(--warn)}
+.svtag.bad{color:var(--err);border-color:var(--err)}
+.svsay{flex:0 0 auto;width:32px;height:32px;border-radius:50%;background:var(--bg4);border:1px solid var(--bd2);
+  color:var(--tx2);font-size:14px;cursor:pointer;transition:.15s;font-family:inherit}
+.svsay:hover{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff}
+.svempty{text-align:center;padding:34px 16px;color:var(--tx3);font-size:13.5px;line-height:2}
+
+@media(max-width:640px){
+  .svrow{padding:10px 12px;gap:9px}
+  .svword{font-size:16px}
+  .svsay{width:30px;height:30px}
+}
