@@ -1654,15 +1654,19 @@
     h += '<button class="chip" id="rdplayall" title="按正常速度逐句通读">🔊 通读</button>';
     h += '<button class="chip" id="rdplayallslow" title="按慢速逐句通读（练听力）">🐢 通读（慢）</button>';
     h += '</div><div class="rart">';
+    let no = 0;   // 显示用序号：只数真正的句子，场景提示不占号
     a.s.forEach(function (s, i) {
+      // 场景提示行（不朗读、不编号、不参与填空）—— 对话体文章用来交代上下文
+      if (s.note) { h += '<div class="rnote">' + esc(s.note) + '</div>'; return; }
+      no++;
       h += '<div class="rline">';
       h += '<div class="rside">';
-      h += '<span class="rnum">' + (i + 1) + '</span>';
+      h += '<span class="rnum">' + no + '</span>';
       h += '<button class="rsay" data-rsay="' + i + '" title="正常速度朗读">🔊</button>';
       h += '<button class="rsay slow" data-rslow="' + i + '" title="慢速朗读（练听力）">慢</button>';
       h += '</div>';
       h += '<div class="rbody">';
-      h += '<div class="rj jp">' + esc(s.j) + '</div>';
+      h += '<div class="rrow">' + (s.sp ? '<span class="rsp">' + esc(s.sp) + '</span>' : '') + '<div class="rj jp">' + esc(s.j) + '</div></div>';
       if (rd.showK) h += '<div class="rk">' + esc(s.k) + '</div>';
       if (rd.showZ) h += '<div class="rz">' + esc(s.z) + '</div>';
       if (s.g) h += '<div class="rgtags">' + esc(s.g) + '</div>';
@@ -1694,7 +1698,7 @@
       + '<button class="chip sm" id="rdplaycurslow" title="慢速听（练听力）">慢速</button></div>';
     h += '<div class="qbox">';
     h += '<div class="qask">填入合适的词　<span class="tip2">' + esc(s.b.h || "") + '</span></div>';
-    h += '<div class="rblank jp">' + qj + '</div>';
+    h += '<div class="rblank jp">' + (s.sp ? '<span class="rsp">' + esc(s.sp) + '</span>' : '') + qj + '</div>';
     h += '<div class="rk">' + esc(qk) + '</div>';
     h += '<input id="rdin" class="inp big" placeholder="输入答案（假名或汉字都可以）" autocomplete="off">';
     h += '<div class="chips"><button class="btn" id="rdok">提交（Enter）</button>'
