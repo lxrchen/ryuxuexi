@@ -1570,20 +1570,29 @@
     S.reading[a.id] = { blank: { r: rd.br, w: rd.bw }, quiz: { r: rd.qr, w: rd.qw }, at: Date.now() };
     save();
   }
+  // 真实句子：跳过场景提示行（note 没有 j）—— 通读与句数统计都必须用它，
+  // 否则「a.s[i].j.length」会因 undefined 直接抛异常，通读一句都发不出声。
+  function realSentences(a) {
+    return (a && a.s ? a.s : []).filter(function (x) { return x && x.j; });
+  }
   function saySentence(a, i, slow) {
     const s = a.s[i];
-    if (s) speak(s.j, { mul: slow ? SLOW_RATE : 1 });
+    if (!s || !s.j) return;          // 场景提示行不朗读
+    speak(s.j, { mul: slow ? SLOW_RATE : 1 });
   }
-  // 通读全文：逐句朗读，按字数估算间隔
+  // 通读全文：逐句朗读，按字数估算间隔；onEnd 用于按钮的播放状态反馈
   let readingTimer = null;
-  function playAll(a, slow) {
-    if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; return; }
+  function playAll(a, slow, onEnd) {
+    if (readingTimer) { clearTimeout(readingTimer); readingTimer = null; if (onEnd) onEnd(); return; }
+    const list = realSentences(a);
+    if (!list.length) { if (onEnd) onEnd(); return; }
     const mul = slow ? SLOW_RATE : 1;
     let i = 0;
     const step = function () {
-      if (i >= a.s.length) { readingTimer = null; return; }
-      tts(a.s[i].j, mul);
-      const dur = Math.max(1600, (a.s[i].j.length * 280 + 700) / mul);   // 慢速时留更长间隔
+      if (i >= list.length) { readingTimer = null; if (onEnd) onEnd(); return; }
+      const j = list[i].j;
+      tts(j, mul);
+      const dur = Math.max(1600, (j.length * 280 + 700) / mul);   // 慢速时留更长间隔
       i++;
       readingTimer = setTimeout(step, dur);
     };
@@ -1626,7 +1635,7 @@
       const bn = blanksOf(a).length;
       h += '<div class="gitem rdopen" data-rdopen="' + a.id + '"><div class="ghead">'
         + '<span class="gname jp">' + esc(a.t) + '</span>'
-        + '<span class="gmean">' + esc(a.zh) + (a.from ? '　<span class="rt">' + esc(a.from) + '</span>' : '') + '　<span class="rt">' + a.s.length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
+        + '<span class="gmean">' + esc(a.zh) + (a.from ? '　<span class="rt">' + esc(a.from) + '</span>' : '') + '　<span class="rt">' + realSentences(a).length + ' 句 · ' + bn + ' 空 · ' + a.q.length + ' 题</span></span>'
         + (a.from ? '<span class="gmark">教材</span>' : (st ? '<span class="gmark">已练过</span>' : '<span class="gmark">未开始</span>'))
         + '</div></div>';
     });
@@ -2144,8 +2153,17 @@
       }
       return;
     }
-    if (t.id === "rdplayall") { if (rd.cur) playAll(rd.cur); return; }
-    if (t.id === "rdplayallslow") { if (rd.cur) playAll(rd.cur, true); return; }
+    if (t.id === "rdplayall" || t.id === "rdplayallslow") {
+      if (!rd.cur) return;
+      const btn = t;
+      const wasPlaying = !!(btn.classList && btn.classList.contains && btn.classList.contains("playing"));
+      // 播放中再点 = 停止；结束后自动清掉按钮状态
+      playAll(rd.cur, t.id === "rdplayallslow", function () {
+        if (btn.classList) btn.classList.remove("playing");
+      });
+      if (!wasPlaying && btn.classList) btn.classList.add("playing");
+      return;
+    }
     if (t.id === "rdplaycur" || t.id === "rdplaycurslow") {
       if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi], t.id === "rdplaycurslow"); }
       return;
@@ -2468,7 +2486,7 @@
   /* ---------- 15. 启动 ---------- */
   rollDay();
   rebuildAll();
-  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
+  globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, realSentences: realSentences, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
     LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
