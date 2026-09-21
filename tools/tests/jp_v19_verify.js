@@ -154,10 +154,11 @@ console.log("\n[7] 全库数据自检");
   t("全部文章自检通过", bad.length === 0, bad.slice(0, 3).join("; "));
   t("id 唯一", new Set(R.map((a) => a.id)).size === R.length);
   const seen = {}, dup = [];
-  // 只查「实质长句」的跨篇重复（防止整段照抄）；短寒暄如「そうですか。」在教材对话里
-  // 必然反复出现，属正常语言现象，不该报错。
+  // 只查「实质长句」的跨篇重复（防止整段照抄）。判据：剥离空格与标点后仍 ≥15 字。
+  // 理由：教材对话里「そうですか。」「ありがとう ございます。」这类寒暄必然反复出现，
+  // 按原句长度判断会被空格撑过阈值 → 误报。要防的是整段照抄，那类句子必然很长。
   R.forEach((a) => a.s.forEach((x) => {
-    if (x.j && x.j.length >= 10) { if (seen[x.j]) dup.push(a.id); else seen[x.j] = a.id; }
+    if (x.j && x.j.replace(/[\s、。？！…「」]/g, "").length >= 15) { if (seen[x.j]) dup.push(a.id); else seen[x.j] = a.id; }
   }));
   t("跨篇无重复句子", dup.length === 0, dup.join(", "));
   t("教材课文总数 ≥ 5", R.filter((a) => a.from).length >= 5, R.filter((a) => a.from).length);
