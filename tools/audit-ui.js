@@ -172,9 +172,12 @@ console.log("\n[5] 逐页冒烟渲染（空数据 + 有数据两种）");
     closest() { return null; }
   });
   const el = (s) => els[s] || (els[s] = mkEl());
+  // 捕获点击处理器，供下面「逐篇渲染」用（事件是委托在 document 上的）
+  let clickHandler = null;
   globalThis.window = { addEventListener() {}, scrollTo() {}, speechSynthesis: { getVoices: () => [], cancel() {}, speak() {} } };
   globalThis.document = {
-    addEventListener() {}, querySelector: el, querySelectorAll: () => [],
+    addEventListener(type, fn) { if (type === "click") clickHandler = fn; },
+    querySelector: el, querySelectorAll: () => [],
     getElementById: el, createElement: () => mkEl(), body: { appendChild() {} }
   };
   globalThis.localStorage = { _d: {}, getItem(k) { return this._d[k] || null; }, setItem(k, v) { this._d[k] = v; }, removeItem(k) { delete this._d[k]; } };
@@ -234,6 +237,45 @@ console.log("\n[5] 逐页冒烟渲染（空数据 + 有数据两种）");
   const dt = Date.now() - t0;
   if (dt > 3000) bad("#/studied 满量渲染耗时 " + dt + "ms（偏慢）");
   else ok("#/studied 满量渲染 " + dt + "ms");
+
+  /* ---- 逐篇渲染所有精读文章的三种阶段 ----
+   * 为什么单列一节：上面只冒烟渲染了「文章列表」，而**文章正文**是另一条渲染路径。
+   * 一篇里混进一个坏字符（如全角引号「“再见！”」、undefined 的假名）只会让
+   * 这一篇炸掉，列表页完全看不出来。逐篇 × 逐阶段渲染才能兜住。 */
+  console.log("");
+  const RD = globalThis.READING || [];
+  const stages = ["read", "blank", "quiz"];
+  let rdBad = 0, rdOk = 0;
+  const fire = (attr, val) => {
+    if (!clickHandler) return false;
+    const target = {
+      id: "", closest: () => null,
+      getAttribute: (n) => (n === attr ? val : null)
+    };
+    clickHandler({ target: target });
+    return true;
+  };
+  if (!clickHandler) bad("没捕获到 click 处理器，逐篇渲染无法进行");
+  else {
+    RD.forEach((a) => {
+      if (!fire("data-rdopen", a.id)) return;
+      stages.forEach((st) => {
+        try {
+          fire("data-rdstage", st);
+          const h = els["#app"].innerHTML || "";
+          if (h.indexOf("undefined") >= 0) { bad(a.id + " 阶段 " + st + " 渲染出 undefined"); rdBad++; return; }
+          if (h.indexOf("NaN") >= 0) { bad(a.id + " 阶段 " + st + " 渲染出 NaN"); rdBad++; return; }
+          if (h.length < 200) { bad(a.id + " 阶段 " + st + " 内容过短（" + h.length + " 字符）"); rdBad++; return; }
+          rdOk++;
+        } catch (e) {
+          bad(a.id + " 阶段 " + st + " 抛异常：" + e.message);
+          rdBad++;
+        }
+      });
+      fire("data-rdback", "1");
+    });
+    if (!rdBad) ok("精读 " + RD.length + " 篇 × " + stages.length + " 阶段全部渲染正常（" + rdOk + " 次）");
+  }
 }
 
 /* ============ 6. CSS 响应式与新增类的覆盖 ============ */
