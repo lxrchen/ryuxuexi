@@ -165,8 +165,10 @@ console.log("\n[7] 全库数据自检");
   // 初级上教材课文已接入的课次必须齐全（缺课说明录入中断，容易被忽略）
   {
     const missing = [];
-    for (let n = 1; n <= 12; n++) if (!R.some((a) => a.id === "rd-cs-" + n)) missing.push(n);
-    t("初级上课文 1–12 齐全", missing.length === 0, "缺：" + missing.join(","));
+    for (let n = 1; n <= 24; n++) if (!R.some((a) => a.id === "rd-cs-" + n)) missing.push(n);
+    t("初级上课文 1–24 齐全", missing.length === 0, "缺：" + missing.join(","));
+    t("初级上课文 24 篇", R.filter((a) => /^rd-cs-\d+$/.test(a.id)).length === 24,
+      R.filter((a) => /^rd-cs-\d+$/.test(a.id)).length);
   }
 }
 
