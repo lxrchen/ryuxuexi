@@ -368,4 +368,37 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   .ctxbox{padding:10px 11px}
   .gtime{font-size:11.5px}
   .rblank{font-size:17px}
+  /* 听选：窄屏下选项收窄，保证 4 个都能一屏看到 */
+  .coptbox{gap:7px;margin:12px 0 2px}
+  .copt{padding:10px 8px;font-size:14.5px;min-height:44px;border-radius:10px}
+  .cres{gap:9px;font-size:12.5px;padding:9px 11px}
+  .pronbox{padding:10px 11px}
 }
+
+/* ===== 听选（听音选答）：选项按钮 ===== */
+.coptbox{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:16px 0 4px;width:100%;max-width:520px}
+.copt{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:12px;
+  padding:12px 14px;font-size:16px;font-family:var(--jp);cursor:pointer;transition:.14s;text-align:center;
+  overflow-wrap:break-word;word-break:break-word;min-height:48px}
+.copt:hover{border-color:var(--ac);background:var(--bg4)}
+.copt.locked{cursor:default}
+.copt.locked:hover{border-color:var(--bd);background:var(--bg3)}
+.copt.ok{border-color:var(--ac2);background:rgba(79,209,165,.13);color:var(--ac2);font-weight:600}
+.copt.no{border-color:var(--err);background:rgba(242,100,90,.12);color:var(--err);text-decoration:line-through}
+/* 听选判分结果条 */
+.cres{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:center;
+  margin:12px 0 4px;padding:10px 13px;background:var(--bg3);border:1px solid var(--bd);border-radius:11px;font-size:13.5px}
+.cres .gtag{color:var(--tx2)}
+.cres .gtag b{color:var(--tx)}
+.cres .gtime{color:var(--tx3)}
+
+/* ===== 发音练习（跟读） ===== */
+.pronbox{margin-top:14px;padding:11px 13px;background:var(--bg3);border:1px solid var(--bd);
+  border-radius:10px;text-align:left}
+.pronres{margin-top:9px;font-size:13.5px;display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pronres:empty{margin-top:0}
+.pronres .near{color:var(--warn)}
+.pronres .wait{color:var(--tx3)}
+.pronres .heard{color:var(--tx2)}
+.pronres .pronmeta{color:var(--tx3);font-size:12px}
+.pronhint{margin-top:8px;font-size:11.5px;line-height:1.75;color:var(--tx3)}

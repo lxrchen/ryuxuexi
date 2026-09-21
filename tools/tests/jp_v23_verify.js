@@ -108,10 +108,10 @@ console.log("\n[2] A. 卡片背面显示耗时与建议 + 推荐按钮高亮");
   t("15 秒 → 推荐「忘记」", /class="g again rec"/.test(h), (h.match(/class="g [a-z]+ rec"/) || [])[0]);
 }
 
-console.log("\n[3] C. 三种练习方向按熟练度自动进阶");
+console.log("\n[3] C. 练习方向按熟练度自动进阶（word→choice→listen→mean）");
 {
   t("自动进阶在新默认里", (J.CARD_MODES[0] || [])[0] === "auto", JSON.stringify(J.CARD_MODES[0]));
-  t("模式列表含 auto/word/listen/mean", J.CARD_MODES.map((m) => m[0]).join(",") === "auto,word,listen,mean");
+  t("模式列表含 auto/word/choice/listen/mean", J.CARD_MODES.map((m) => m[0]).join(",") === "auto,word,choice,listen,mean");
 
   S.settings.cardMode = "auto";
   const mk = (n, ph) => ({ n: n, ph: ph || "r", i: n, ef: 2.5, due: 0, st: 1, lp: 0 });
@@ -119,9 +119,10 @@ console.log("\n[3] C. 三种练习方向按熟练度自动进阶");
   t("学习中的卡 → 看词想义", J.dirOf({ n: 0, ph: "l", st: -1 }) === "word");
   t("毕业 n=1 → 看词想义", J.dirOf(mk(1)) === "word");
   t("毕业 n=2 → 看词想义", J.dirOf(mk(2)) === "word");
-  t("毕业 n=3 → 听音辨义", J.dirOf(mk(3)) === "listen");
-  t("毕业 n=4 → 听音辨义", J.dirOf(mk(4)) === "listen");
-  t("毕业 n=5 → 看义想词", J.dirOf(mk(5)) === "mean");
+  t("毕业 n=3 → 听音选答", J.dirOf(mk(3)) === "choice", J.dirOf(mk(3)));
+  t("毕业 n=4 → 听音辨义", J.dirOf(mk(4)) === "listen", J.dirOf(mk(4)));
+  t("毕业 n=5 → 听音辨义", J.dirOf(mk(5)) === "listen", J.dirOf(mk(5)));
+  t("毕业 n=6 → 看义想词", J.dirOf(mk(6)) === "mean", J.dirOf(mk(6)));
   t("毕业 n=9 → 看义想词", J.dirOf(mk(9)) === "mean");
 
   S.settings.cardMode = "listen";

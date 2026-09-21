@@ -195,7 +195,7 @@ console.log("\n[10] 其他功能未被破坏");
 {
   t("慢速倍率仍在", J.SLOW_RATE === 0.7);
   t("听写判分可用", J.matchWord({ k: "ねこ", w: "猫" }, "猫") === true);
-  t("四种卡片方向（含自动进阶）", J.CARD_MODES.length === 4 && J.CARD_MODES[0][0] === "auto");
+  t("五种卡片方向（含自动进阶）", J.CARD_MODES.length === 5 && J.CARD_MODES[0][0] === "auto");
   t("学习步进仍在", J.LEARN_STEPS.length === 2);
   t("文章数据自检通过", R.every((a) => a.s.every((x) => x.note || (x.j && x.k && x.z))));
   t("挖空答案仍在原句中", R.every((a) => a.s.every((x) => !x.b || (x.j.indexOf(x.b.a) >= 0 && x.j.split(x.b.a).length - 1 === 1))));

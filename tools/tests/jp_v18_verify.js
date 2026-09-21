@@ -194,7 +194,7 @@ console.log("\n[8] 文章数量与数据完整性");
 
 console.log("\n[9] 其他功能未被破坏");
 {
-  t("单词卡四种方向（含自动进阶）", J.CARD_MODES.length === 4 && J.CARD_MODES[0][0] === "auto");
+  t("单词卡五种方向（含自动进阶）", J.CARD_MODES.length === 5 && J.CARD_MODES[0][0] === "auto");
   t("学习步进仍在", J.LEARN_STEPS.length === 2);
   t("听写判分可用", J.matchWord({ k: "ねこ", w: "猫" }, "猫") === true);
   t("挖空判分可用", (function () {

@@ -176,7 +176,7 @@ console.log("\n[8] 其他功能未被破坏");
 {
   t("慢速倍率仍在", J.SLOW_RATE === 0.7);
   t("听写判分可用", J.matchWord({ k: "ねこ", w: "猫" }, "猫") === true);
-  t("四种卡片方向（含自动进阶）", J.CARD_MODES.length === 4 && J.CARD_MODES[0][0] === "auto");
+  t("五种卡片方向（含自动进阶）", J.CARD_MODES.length === 5 && J.CARD_MODES[0][0] === "auto");
   t("学习步进仍在", J.LEARN_STEPS.length === 2);
   t("教材大纲仍在", J.TEXTBOOK.length > 0);
   t("文章列表可渲染", J.readListHTML().length > 100);

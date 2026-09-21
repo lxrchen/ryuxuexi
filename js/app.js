@@ -105,7 +105,8 @@
     wrong: [],         // 错词本（单词 id 列表）
     badges: {},        // 成就
     custom: { vocab: [], grammar: [] },  // 用户自定义词库 / 语法
-    reading: {}        // 文章精读进度: id -> { blank:{r,w}, quiz:{r,w}, at }
+    reading: {},       // 文章精读进度: id -> { blank:{r,w}, quiz:{r,w}, at }
+    pron: {}           // 发音练习记录: id -> { n 练过次数, best 最好相似度 }
   };
   let S = (function () {
     try { const r = JSON.parse(localStorage.getItem(KEY)); if (r) return Object.assign({}, DEF, r); }
@@ -117,6 +118,8 @@
   S.custom = (S.custom && S.custom.vocab && S.custom.grammar)
     ? { vocab: S.custom.vocab.slice(), grammar: S.custom.grammar.slice() }
     : { vocab: [], grammar: [] };
+  // 同上：pron 是对象，必须切断与 DEF 的共享引用，否则写记录会污染默认值
+  S.pron = Object.assign({}, S.pron || {});
   function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
 
   /* ---------- 2b. 自定义词库合并 ---------- */
@@ -866,8 +869,8 @@
 
   /* ---------- 9. 视图：单词 SRS ---------- */
   // 学习 与 复习 是两套完全独立的状态：各自维护级别、课号范围、队列、进度
-  let ls = { lv: savedLv("learn"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "learn" };
-  let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review", rmode: "due" };
+  let ls = { lv: savedLv("learn"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "learn", ch: null };
+  let rs = { lv: savedLv("review"), queue: [], idx: 0, show: false, lesson: 0, src: "", kind: "review", rmode: "due", ch: null };
   let vs = ls;   // 指向当前页面所用状态（进入路由时切换）
   let lastCardRoute = null, lastCardDay = "";   // 上次渲染的卡片页路由/日期：只有进入页面或跨天才重建队列
   let lastSpokenId = null;    // 听音模式：同一张卡只自动播放一次（翻面不重播）
@@ -1070,13 +1073,16 @@
         + (m[0] === "auto" ? ' title="按熟练度自动切换练法"' : '') + '>' + m[1] + '</button>';
     });
     h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
-    if (cMode === "listen" || cMode === "auto") {
+    if (cMode === "listen" || cMode === "choice" || cMode === "auto") {
       const ap = S.settings.autoPlay !== false;
-      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
+      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音 / 听选模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
     }
     h += '</div>';
     h += '<div class="tip2">'
-      + (cMode === "auto" ? '🪜 <b>自动进阶</b>：新词先「看词想义」建立形义联系 → 复习到 3–4 次自动换「听音辨义」练听力 → 5 次以后「看义想词」练产出。每张卡的信息栏会标出当前练法，想固定用某一种就点上面切换。'
+      + (cMode === "auto" ? '🪜 <b>自动进阶</b>：新词先「看词想义」建立形义联系 → 复习到 3 次自动换「听音选答」练听解 → 4–5 次「听音辨义」（去掉选项，纯回忆）→ 6 次以后「看义想词」练产出。每张卡的信息栏会标出当前练法，想固定用某一种就点上面切换。'
+        : cMode === "choice" ? '🎯 <b>听音选答</b>：放发音 → 第 1 问从 4 个词里选出听到的那个 → 第 2 问再选出它的中文意思。'
+          + '两问答完<b>自动判分</b>（客观对错，不用自评）：全对 → 良好（4 秒内算「简单」），对一半 → 困难，全错 → 忘记。'
+          + '答错照常写进复习计划。每张卡背面都有「🎤 跟读一遍」，可以顺手练口语。'
         : cMode === "listen" ? '🎧 <b>听音辨义</b>：只放发音，不看字 —— 练「听到就能反应出意思」。按 <kbd>S</kbd> 或点 🔊 重听。'
           : cMode === "mean" ? '✍️ <b>看义想词</b>：看中文，在脑子里拼出日文写法与读音 —— 从「认得」进阶到「用得出」。'
             : '👁️ <b>看词想义</b>：看词形想意思。')
@@ -1191,9 +1197,13 @@
      「答对但想了 8 秒」和「1 秒内秒懂」不是一回事 —— 现在把耗时作为评分的客观锚点，
      在按钮上标出建议档位（不强制，只防自欺）。 */
   let cardShownAt = 0, timedKey = "";
+  let pronToken = 0;   // 换卡时自增：语音识别回调落地前先校验，避免结果写进下一张卡
   function markCardShown(v) {
     const key = v ? v.id : "";
-    if (key !== timedKey) { timedKey = key; cardShownAt = Date.now(); vs.elapsed = 0; vs.hint = false; }
+    if (key !== timedKey) {
+      timedKey = key; cardShownAt = Date.now(); vs.elapsed = 0; vs.hint = false;
+      pronToken++;      // 换卡 → 作废在途的语音识别回调，避免结果落进下一张卡
+    }
   }
   function elapsedMs() { return cardShownAt ? Math.max(0, Date.now() - cardShownAt) : 0; }
   /* 建议档位：0 忘记 / 1 困难 / 2 良好 / 3 简单 */
@@ -1204,24 +1214,29 @@
     else if (ms < 4000) g = 2;
     else if (ms < 9000) g = 1;
     else g = 0;
-    // 翻面前点了朗读 = 听了答案，最多只算「困难」；听音模式本来就要听，不算提示
-    if (usedHint && mode !== "listen") g = Math.min(g, 1);
+    // 翻面前点了朗读 = 听了答案，最多只算「困难」；听音 / 听选模式本来就要听，不算提示
+    if (usedHint && mode !== "listen" && mode !== "choice") g = Math.min(g, 1);
     return g;
   }
   function fmtSec(ms) { return (Math.max(0, ms) / 1000).toFixed(1); }
 
   /* C. 练习方向自动进阶：先建立形义联系 → 再练听解 → 最后练产出。
-     只在「刚能认出来」的难度上练，记忆增长最慢，所以难度要跟着熟练度走。 */
+     只在「刚能认出来」的难度上练，记忆增长最慢，所以难度要跟着熟练度走。
+     听选（choice）插在 word 之后：四选一是「听得出来」的低门槛版，
+     比听音辨义（纯回忆）容易，又比看词想义多了听解，正好当中间台阶。 */
   function dirOf(c) {
     const m = S.settings.cardMode || "auto";
     if (m !== "auto") return m;
     if (!c || isLearning(c)) return "word";        // 还没毕业 → 先建立形义联系
     const n = c.n || 0;
     if (n <= 2) return "word";
-    if (n <= 4) return "listen";
+    if (n <= 3) return "choice";
+    if (n <= 5) return "listen";
     return "mean";
   }
-  function dirLabel(d) { return d === "listen" ? "听音辨义" : d === "mean" ? "看义想词" : "看词想义"; }
+  function dirLabel(d) {
+    return d === "choice" ? "听音选答" : d === "listen" ? "听音辨义" : d === "mean" ? "看义想词" : "看词想义";
+  }
 
   /* D. 失误过的词：答错时已经强制「1 分钟后重来」一次了，之后走更长的 10 → 60 分钟，
      毕业前多一个当天检查点（普通词是 1 → 10 分钟就毕业）。 */
@@ -1291,14 +1306,191 @@
     return m;
   }
 
-  const CARD_MODES = [["auto", "自动进阶"], ["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
+  const CARD_MODES = [["auto", "自动进阶"], ["word", "看词想义"], ["choice", "听音选答"], ["listen", "听音辨义"], ["mean", "看义想词"]];
+
+  /* ================= 听选（choice）：播发音 → 选词形 → 选词义 =================
+     为什么这个模式**不给自评按钮**：两道选择题的对错是客观事实，再让用户自评
+     只会引入后见之明偏差（v1.14.0 的教训）—— 直接由对错 + 用时定档，更准也更省事。 */
+  const CHOICE_N = 4;                     // 每题选项数
+
+  /* 干扰项：优先「同级别 + 同词性 + 同来源」，再退到同词性、最后任意。
+     太远的词（词性不同、长短悬殊）一眼就能排除，练不到东西。 */
+  function choiceDistractors(v, kind, n) {
+    const mine = kind === "mean" ? (v.z || "") : (v.w || v.k || "");
+    if (!mine) return [];
+    const seen = {};
+    seen[mine] = 1;                       // 选项之间也必须互不相同（否则出现两个一样的）
+    const same = [], near = [], far = [];
+    (VOCAB[v.lv] || []).forEach(function (x) {
+      if (x.id === v.id) return;
+      const val = kind === "mean" ? (x.z || "") : (x.w || x.k || "");
+      if (!val || seen[val]) return;
+      seen[val] = 1;
+      const o = { v: x, d: Math.abs(val.length - mine.length) };
+      if (x.p === v.p && x.src === v.src) same.push(o);
+      else if (x.p === v.p) near.push(o);
+      else far.push(o);
+    });
+    const byLen = function (a) { a.sort(function (x, y) { return x.d - y.d; }); return a.map(function (o) { return o.v; }); };
+    return byLen(same).concat(byLen(near), byLen(far)).slice(0, n);
+  }
+
+  function buildChoice(v) {
+    const n = CHOICE_N - 1;
+    const wp = choiceDistractors(v, "word", n);
+    const mp = choiceDistractors(v, "mean", n);
+    // 池子太小就不硬出听选（新级别刚起步时会遇到），退回「看词想义」
+    if (wp.length < n || mp.length < n) return null;
+    return {
+      id: v.id, step: 0, t0: Date.now(), ms: 0,
+      wopts: shuffle([v].concat(wp)),
+      mopts: shuffle([v].concat(mp)),
+      pickW: -1, pickM: -1, okW: null, okM: null, grade: null
+    };
+  }
+
+  /* 客观定档：两问全对 → 良好（4 秒内算秒懂）/ 对一半 → 困难 / 全错 → 忘记 */
+  function gradeChoice(okW, okM, ms) {
+    const n = (okW ? 1 : 0) + (okM ? 1 : 0);
+    if (n === 0) return 0;
+    if (n === 1) return 1;
+    return ms > 0 && ms < 4000 ? 3 : 2;
+  }
+
+  function finishChoice(v, ch) {
+    review(v.id, ch.grade);                          // ← 关键：照样回写 SRS，否则记忆机制白做
+    if (ch.grade <= 1) pushWrong(v.id); else popWrong(v.id);
+    bumpCombo(ch.grade >= 2); addXp(ch.grade >= 2 ? 10 : 2); syncBadges();
+    vs.show = true;
+    renderCard();
+  }
+
+  /* ================= 发音练习：麦克风 → 识别 → 与目标词比对 =================
+     诚实说明：浏览器语音识别只返回「文本」，不返回音素分，所以这里能做的客观判断
+     是「你说的能不能被识别成这个词」。对口语练习足够有用，但**不是专业发音评分**。
+     因此：① 文案明确写「仅作练习」；② **不参与 SRS**（口语和再认是两种能力，
+     拿它去改复习间隔会污染记忆模型）。 */
+  function kanaNorm(s) {
+    s = String(s || "");
+    // 片假名 → 平假名（标准偏移 0x60），让「コーヒー」与「こーひー」能对上
+    s = s.replace(/[\u30a1-\u30f6]/g, function (c) {
+      return String.fromCharCode(c.charCodeAt(0) - 0x60);
+    });
+    // 去掉空白、标点、长音符/波浪线等书写差异
+    return s.replace(/[\s、。，．,\.!?！？「」『』（）\(\)・…ー~～\-—]/g, "");
+  }
+  function levDist(a, b) {
+    if (a === b) return 0;
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
+    let prev = [], cur = [];
+    for (let j = 0; j <= n; j++) prev[j] = j;
+    for (let i = 1; i <= m; i++) {
+      cur[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const sub = prev[j - 1] + (a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1);
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, sub);
+      }
+      const t = prev; prev = cur; cur = t;
+    }
+    return prev[n];
+  }
+  function pronSim(target, heard) {
+    const t = kanaNorm(target), h = kanaNorm(heard);
+    if (!t || !h) return 0;
+    if (t === h) return 1;
+    const base = 1 - levDist(t, h) / Math.max(t.length, h.length);
+    // 识别常会多带或少带助词，包含关系给个好评
+    if (t.length >= 2 && (h.indexOf(t) >= 0 || t.indexOf(h) >= 0)) return Math.max(base, 0.85);
+    return Math.max(0, base);
+  }
+  function pronVerdict(s) { return s >= 0.95 ? "good" : s >= 0.7 ? "near" : "bad"; }
+  function pronBest(v, alts) {
+    let best = 0, heard = "";
+    (alts || []).forEach(function (a) {
+      const cand = String(a == null ? "" : a).trim();
+      if (!cand) return;
+      // 识别可能返回汉字形，所以 k（假名）和 w（汉字）都要比
+      const s = Math.max(pronSim(v.k, cand), pronSim(v.w, cand));
+      if (s > best) { best = s; heard = cand; }
+    });
+    return { score: best, heard: heard };
+  }
+  function showPronResult(r, v) {
+    const box = $("#pronres");
+    if (!box) return;                                  // 直接改 DOM，不走整体重渲染（会丢滚动位置）
+    const kind = pronVerdict(r.score);
+    if (!S.pron) S.pron = {};
+    const p = S.pron[v.id] || { n: 0, best: 0 };
+    p.n++; if (r.score > p.best) p.best = r.score;
+    S.pron[v.id] = p; save();
+    const label = kind === "good" ? "✓ 读得很准" : kind === "near" ? "△ 接近了，再清楚一点" : "✗ 再读一遍";
+    box.innerHTML = '<span class="' + (kind === "good" ? "ok" : kind === "near" ? "near" : "no") + '">' + label + "</span>"
+      + (r.heard ? '<span class="heard">识别到：' + esc(r.heard) + "</span>" : "")
+      + '<span class="pronmeta">已练 ' + p.n + ' 次 · 最好 ' + Math.round(p.best * 100) + '%</span>';
+  }
+  function startPron() {
+    const box = $("#pronres");
+    const v = vs.queue && vs.queue[vs.idx];
+    if (!box || !v) return;
+    const SR = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
+    if (!SR) {
+      box.innerHTML = '<span class="no">这个浏览器不支持语音识别 —— 换 Chrome 或 Edge（Safari / Firefox 目前都不行）</span>';
+      return;
+    }
+    const my = ++pronToken;                            // 令牌：换卡后回调作废
+    let rec;
+    try { rec = new SR(); } catch (e) {
+      box.innerHTML = '<span class="no">语音识别启动失败：' + esc(e && e.message ? e.message : e) + "</span>";
+      return;
+    }
+    rec.lang = "ja-JP";
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.maxAlternatives = 3;
+    box.innerHTML = '<span class="wait">🎤 正在听……请读这个词</span>';
+    rec.onresult = function (e) {
+      if (my !== pronToken) return;
+      const alts = [];
+      const r0 = e.results && e.results[0];
+      if (r0) for (let i = 0; i < r0.length; i++) alts.push(r0[i].transcript);
+      showPronResult(pronBest(v, alts), v);
+    };
+    rec.onerror = function (e) {
+      if (my !== pronToken) return;
+      const msg = {
+        "not-allowed": "麦克风权限被拒绝了 —— 在地址栏允许麦克风后重试",
+        "service-not-allowed": "浏览器不允许语音识别（多半不是 https 页面）",
+        "no-speech": "没听到声音，再试一次（离麦克风近一点）",
+        "audio-capture": "找不到麦克风设备",
+        "network": "识别服务连不上（语音识别需要联网）"
+      }[e.error] || ("识别出错：" + e.error);
+      box.innerHTML = '<span class="no">' + esc(msg) + "</span>";
+    };
+    rec.onend = function () {
+      // 只有「还没出结果」时才提示，别把已经写好的结果覆盖掉
+      if (my === pronToken && box.innerHTML.indexOf("正在听") >= 0) {
+        box.innerHTML = '<span class="wait">没识别到内容，再试一次</span>';
+      }
+    };
+    try { rec.start(); } catch (e) {
+      box.innerHTML = '<span class="no">启动失败：' + esc(e && e.message ? e.message : e) + "</span>";
+    }
+  }
+
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
     if (vs.idx >= vs.queue.length) refillLearn(vs);          // 刚到期的学习步词补到队尾
     if (vs.idx >= vs.queue.length) { box.innerHTML = doneHTML(); return; }
     const v = vs.queue[vs.idx];
     const c = S.cards[v.id];
-    const mode = dirOf(c);              // 自动进阶：按熟练度选练法（顶部按钮可覆盖为固定方向）
+    let mode = dirOf(c);                // 自动进阶：按熟练度选练法（顶部按钮可覆盖为固定方向）
+    // 听选：每次换卡重建题目；干扰项池子不够时（新级别刚起步）退回看词想义
+    if (mode === "choice") {
+      if (!vs.ch || vs.ch.id !== v.id) vs.ch = buildChoice(v);
+      if (!vs.ch) mode = "word";
+    }
     markCardShown(v);                   // 记录正面出现时刻，翻面时算反应时间
     const showKana = S.settings.cardKana !== false;
     const srcLab = v.custom ? "我的词库"
@@ -1310,14 +1502,38 @@
     else stateLab = "　复习 #" + c.n;
     const meta = v.lv + "　" + srcLab + "　" + esc(v.p || "")
       + stateLab
-      + (S.settings.cardMode === "auto" ? "　<b>" + dirLabel(mode) + "</b>" : "")
+      + "　<b>" + dirLabel(mode) + "</b>"      // 始终标出「这张卡实际在用哪种练法」
       + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
     const hasLive = hasHuman(v.w, v.k) ? '<span class="badge-live">真人</span>' : "";
     const sayBtn = function (bid) { return '<button class="chip" id="' + bid + '">🔊 朗读（S）' + hasLive + "</button>"; };
 
     // 正面：按练习方向渲染
     let frontBody;
-    if (mode === "listen") {
+    if (mode === "choice") {
+      const ch = vs.ch;
+      const stepped = ch.step === 1;
+      const opts = stepped ? ch.mopts : ch.wopts;
+      const pick = stepped ? ch.pickM : ch.pickW;
+      let ot = "";
+      opts.forEach(function (o, i) {
+        let cls = "copt";
+        if (pick >= 0) {
+          cls += " locked";
+          if (o.id === v.id) cls += " ok";              // 正确项标绿
+          else if (i === pick) cls += " no";            // 选错的那个标红
+        }
+        // 选词题只给「词本身」——不给假名，否则等于把读音直接写出来了
+        ot += '<button class="' + cls + '" data-copt="' + i + '">'
+          + esc(stepped ? o.z : (o.w || o.k)) + "</button>";
+      });
+      frontBody = '<button class="bigsay" id="vsay3" title="重听（S）">🔊</button>'
+        + '<div class="chint">' + (stepped
+          ? "第 2 / 2 问 · 再听一遍 → 选出它的<b>意思</b>"
+          : "第 1 / 2 问 · 听发音 → 选出这是<b>哪个词</b>")
+        + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>"
+        + '<div class="coptbox">' + ot + "</div>"
+        + '<div class="slowrow"><button class="chip sm" id="vsay4" title="慢速重听，听清后再回到正常速度">🐢 慢速重听</button></div>';
+    } else if (mode === "listen") {
       frontBody = '<button class="bigsay" id="vsay3" title="重听（S）">🔊</button>'
         + '<div class="chint">听发音 → 想出<b>这个词本身 + 它的意思</b>'
         + (S.settings.autoPlay === false ? "" : "（自动播放）") + "</div>"
@@ -1332,11 +1548,19 @@
 
     let h = '<div class="cwrap">';
     h += '<div class="cface"><div class="cmeta">' + meta + "</div>" + frontBody;
-    if (mode !== "listen") h += sayBtn("vsay");
-    h += '<div class="grades"><button class="btn" id="vshow">显示答案（空格）</button></div>';
-    h += '<div class="hint">'
-      + (mode === "listen" ? "先只听声音回忆，别急着看字 · " : mode === "mean" ? "先在脑子里拼出日文，再翻面 · " : "先自己回忆意思，再翻面 · ")
-      + '快捷键 <kbd>1</kbd>忘记 <kbd>2</kbd>困难 <kbd>3</kbd>良好 <kbd>4</kbd>简单 <kbd>S</kbd>重听</div></div>';
+    if (mode !== "listen" && mode !== "choice") h += sayBtn("vsay");
+    if (mode === "choice") {
+      // 听选没有「显示答案」——答案就是选项本身；答完第 1 问给「下一问」
+      if (!vs.show && vs.ch.step === 0 && vs.ch.pickW >= 0) {
+        h += '<div class="grades"><button class="btn" data-cstep="1">下一问 →（空格）</button></div>';
+      }
+      h += '<div class="hint">听发音选答案，<b>两问答完自动判分</b>（不用自评）· 快捷键 <kbd>1</kbd>~<kbd>4</kbd>选选项 <kbd>S</kbd>重听</div></div>';
+    } else {
+      h += '<div class="grades"><button class="btn" id="vshow">显示答案（空格）</button></div>';
+      h += '<div class="hint">'
+        + (mode === "listen" ? "先只听声音回忆，别急着看字 · " : mode === "mean" ? "先在脑子里拼出日文，再翻面 · " : "先自己回忆意思，再翻面 · ")
+        + '快捷键 <kbd>1</kbd>忘记 <kbd>2</kbd>困难 <kbd>3</kbd>良好 <kbd>4</kbd>简单 <kbd>S</kbd>重听</div></div>';
+    }
 
     // 背面：完整信息（词 + 注音 + 释义 + 朗读）+ 客观评分锚点 + 语境例句
     const elapsed = vs.elapsed || 0;
@@ -1349,15 +1573,35 @@
     h += '<div class="cface cback"><div class="cmeta">' + meta + "</div>" + wordHTML(v, true);
     h += '<div class="cmean">' + esc(v.z) + "</div>";
     h += sayBtn("vsay2");
-    if (elapsed) {
-      h += '<div class="gtime">你用了 <b>' + fmtSec(elapsed) + '</b> 秒'
-        + (vs.hint ? '（用了提示）' : '')
-        + ' → 建议评「<b>' + GNAMES[sg] + '</b>」</div>';
+    if (mode === "choice" && vs.ch && vs.ch.grade != null) {
+      const ch = vs.ch;
+      h += '<div class="cres">'
+        + '<span class="' + (ch.okW ? "ok" : "no") + '">选词 ' + (ch.okW ? "✓" : "✗") + "</span>"
+        + '<span class="' + (ch.okM ? "ok" : "no") + '">选义 ' + (ch.okM ? "✓" : "✗") + "</span>"
+        + '<span class="gtag">本题判定 <b>' + GNAMES[ch.grade] + "</b></span>"
+        + '<span class="gtime">用时 ' + fmtSec(ch.ms) + " 秒</span>"
+        + "</div>";
+      h += '<div class="grades"><button class="btn" id="cnext">下一张（空格）</button></div>';
+      h += '<div class="hint">听选是<b>客观判分</b>：两问全对 → 良好（4 秒内算「简单」）；对一半 → 困难；全错 → 忘记。'
+        + '你答错的那一项已照常记入复习计划。</div>';
+    } else {
+      if (elapsed) {
+        h += '<div class="gtime">你用了 <b>' + fmtSec(elapsed) + '</b> 秒'
+          + (vs.hint ? '（用了提示）' : '')
+          + ' → 建议评「<b>' + GNAMES[sg] + '</b>」</div>';
+      }
+      h += '<div class="grades">'
+        + gbtn("again", 0, "1") + gbtn("hard", 1, "2") + gbtn("good", 2, "3") + gbtn("easy", 3, "4")
+        + '</div>';
+      h += '<div class="hint">评「忘记/困难」→ <b>1 分钟后</b>当天再来一次；走完学习步才按天间隔排复习</div>';
     }
-    h += '<div class="grades">'
-      + gbtn("again", 0, "1") + gbtn("hard", 1, "2") + gbtn("good", 2, "3") + gbtn("easy", 3, "4")
-      + '</div>';
-    h += '<div class="hint">评「忘记/困难」→ <b>1 分钟后</b>当天再来一次；走完学习步才按天间隔排复习</div>';
+    // 发音练习：任何模式下都能用，练口语（不参与 SRS 评分）
+    h += '<div class="pronbox">'
+      + '<button class="chip" id="vpron">🎤 跟读一遍（练口语）</button>'
+      + '<div class="pronres" id="pronres"></div>'
+      + '<div class="pronhint">用麦克风读出这个词，系统把识别结果与词比对 —— '
+      + '<b>仅作口语练习，不评分、不影响复习计划</b>（需 Chrome / Edge 并允许麦克风）</div>'
+      + "</div>";
     const cx = ctxOf(v);
     if (cx) {
       const from = cx.kind === "read"
@@ -1373,11 +1617,14 @@
     h += '<div class="combo"></div>';
     box.innerHTML = h;
     box.classList.toggle("flipped", !!vs.show);
-    // 听音模式：进入卡片时自动播放一次（翻面不重播）
-    if (mode === "listen" && !vs.show && S.settings.autoPlay !== false && lastSpokenId !== v.id) {
-      lastSpokenId = v.id;
+    // 听音 / 听选：进入卡片时自动播放一次（翻面不重播）。
+    // 听选要「换一问就重播一次」，所以键里带上 step —— 否则第 2 问会没声音。
+    const speakKey = (mode === "choice" && vs.ch) ? (v.id + "|c" + vs.ch.step) : v.id;
+    if ((mode === "listen" || mode === "choice") && !vs.show
+        && S.settings.autoPlay !== false && lastSpokenId !== speakKey) {
+      lastSpokenId = speakKey;
       setTimeout(function () { sayWord(v); }, 90);
-    } else if (lastSpokenId !== v.id) { lastSpokenId = v.id; }
+    } else if (lastSpokenId !== speakKey) { lastSpokenId = speakKey; }
     // 后台预取下一张的真人音，刷卡时几乎无感
     try { prefetchNext(); } catch (e) {}
   }
@@ -2498,6 +2745,36 @@
       bumpCombo(g >= 2); addXp(g >= 2 ? 10 : 2); syncBadges();
       vs.idx++; vs.show = false; render(); return;
     }
+    /* ---- 听选（choice） ---- */
+    if (A("data-copt")) {
+      const ch = vs.ch;
+      if (!ch || vs.show) return;
+      const i = parseInt(A("data-copt"), 10);
+      const opts = ch.step === 0 ? ch.wopts : ch.mopts;
+      const v = vs.queue[vs.idx];
+      if (!opts || !opts[i]) return;
+      const ok = opts[i].id === v.id;
+      if (ch.step === 0) {
+        if (ch.pickW >= 0) return;              // 已答过，防连点重复计分
+        ch.pickW = i; ch.okW = ok;
+      } else {
+        if (ch.pickM >= 0) return;
+        ch.pickM = i; ch.okM = ok;
+        ch.ms = Date.now() - ch.t0;
+        ch.grade = gradeChoice(ch.okW, ch.okM, ch.ms);
+        finishChoice(v, ch);                    // 判分 + 回写 SRS + 翻到背面
+        return;
+      }
+      renderCard(); return;
+    }
+    if (A("data-cstep")) {                      // 第 1 问答完 → 进第 2 问
+      if (!vs.ch || vs.ch.pickW < 0) return;
+      vs.ch.step = 1; renderCard(); return;
+    }
+    if (t.id === "cnext") {                     // 听选：下一张
+      vs.idx++; vs.show = false; vs.ch = null; render(); return;
+    }
+    if (t.id === "vpron") { startPron(); return; }
     if (A("data-glv")) { gs.lv = A("data-glv"); render(); return; }
     if (A("data-gid")) {
       const id = A("data-gid"); const b = document.getElementById("gb-" + id);
@@ -2791,17 +3068,28 @@
       } else if (k === "Enter") { nextKana(); renderKanaQ(); }
       else if (k === "s" || k === "S") { speak(kanaQ.ex || kanaQ.ans || ""); }
     } else if (r === "learn" || r === "review" || r === "vocab") {
+      // 听选模式下按键含义不同：空格推进（下一问 / 下一张），1~4 选选项
+      const cMode = (vs.idx < vs.queue.length) ? dirOf(S.cards[vs.queue[vs.idx].id]) : "";
+      const inChoice = cMode === "choice" && vs.ch;
       if (k === " ") {
         e.preventDefault();
-        if (vs.idx < vs.queue.length) {
+        if (inChoice) {
+          const nx = document.querySelector("#vcard .grades button");
+          if (nx) nx.click();
+        } else if (vs.idx < vs.queue.length) {
           if (!vs.show) vs.elapsed = elapsedMs();   // 翻到背面 → 结算反应时间
           vs.show = !vs.show; renderCard();
         }
       }
       else if (k >= "1" && k <= "4") {
-        const b = document.querySelector('#vcard .g[data-g="' + (parseInt(k, 10) - 1) + '"]');
-        if (b) b.click();
-        else if (vs.idx < vs.queue.length) { vs.elapsed = elapsedMs(); vs.show = true; renderCard(); }
+        if (inChoice) {
+          const b = document.querySelector('#vcard .copt[data-copt="' + (parseInt(k, 10) - 1) + '"]');
+          if (b) b.click();
+        } else {
+          const b = document.querySelector('#vcard .g[data-g="' + (parseInt(k, 10) - 1) + '"]');
+          if (b) b.click();
+          else if (vs.idx < vs.queue.length) { vs.elapsed = elapsedMs(); vs.show = true; renderCard(); }
+        }
       } else if (k === "s" || k === "S") { sayWord(vs.queue[vs.idx]); }
     } else if (r === "drill") {
       if (k === "Enter") { const b = document.getElementById("dok") || document.getElementById("dnext"); if (b) b.click(); }
@@ -2997,7 +3285,11 @@
     LEARN_STEPS: LEARN_STEPS, LP_STEPS: LP_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
     dirOf: dirOf, dirLabel: dirLabel, suggestGrade: suggestGrade, elapsedMs: elapsedMs,
     flagWeak: flagWeak, ctxOf: ctxOf, formMap: formMap, setTimedKey: function (k) { timedKey = k; },
-    sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
+    sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard,
+    /* 听选 + 口语练习（供测试直接调用） */
+    CHOICE_N: CHOICE_N, buildChoice: buildChoice, gradeChoice: gradeChoice, choiceDistractors: choiceDistractors,
+    kanaNorm: kanaNorm, levDist: levDist, pronSim: pronSim, pronVerdict: pronVerdict, pronBest: pronBest,
+    startPron: startPron, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
   syncBadges();
