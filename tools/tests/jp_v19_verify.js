@@ -139,8 +139,8 @@ console.log("\n[6] 原有非对话体文章仍然正常（不能因新格式而�
 console.log("\n[7] 全库数据自检");
 {
   const by = {}; R.forEach((a) => { by[a.lv] = (by[a.lv] || 0) + 1; });
-  t("N5 篇数 ≥ 12（8 原创 + 4 教材）", by.N5 >= 12, by.N5);
-  t("总篇数 ≥ 25", R.length >= 25, R.length);
+  t("N5 篇数 ≥ 20（8 原创 + 初级上教材课文）", by.N5 >= 20, by.N5);
+  t("总篇数 ≥ 34", R.length >= 34, R.length);
   let bad = [];
   R.forEach((a) => {
     if (!a.id || !a.lv || !a.t || !a.zh || !a.s || !a.s.length || !a.q || !a.q.length) bad.push(a.id + " 字段缺失");
@@ -154,9 +154,19 @@ console.log("\n[7] 全库数据自检");
   t("全部文章自检通过", bad.length === 0, bad.slice(0, 3).join("; "));
   t("id 唯一", new Set(R.map((a) => a.id)).size === R.length);
   const seen = {}, dup = [];
-  R.forEach((a) => a.s.forEach((x) => { if (x.j) { if (seen[x.j]) dup.push(a.id); else seen[x.j] = a.id; } }));
+  // 只查「实质长句」的跨篇重复（防止整段照抄）；短寒暄如「そうですか。」在教材对话里
+  // 必然反复出现，属正常语言现象，不该报错。
+  R.forEach((a) => a.s.forEach((x) => {
+    if (x.j && x.j.length >= 10) { if (seen[x.j]) dup.push(a.id); else seen[x.j] = a.id; }
+  }));
   t("跨篇无重复句子", dup.length === 0, dup.join(", "));
   t("教材课文总数 ≥ 5", R.filter((a) => a.from).length >= 5, R.filter((a) => a.from).length);
+  // 初级上教材课文已接入的课次必须齐全（缺课说明录入中断，容易被忽略）
+  {
+    const missing = [];
+    for (let n = 1; n <= 12; n++) if (!R.some((a) => a.id === "rd-cs-" + n)) missing.push(n);
+    t("初级上课文 1–12 齐全", missing.length === 0, "缺：" + missing.join(","));
+  }
 }
 
 console.log("\n[8] 其他功能未被破坏");
