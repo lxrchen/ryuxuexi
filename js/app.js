@@ -143,6 +143,8 @@
   function customGrammar() { return (S.custom && S.custom.grammar) || []; }
   function rebuildAll() {
     VMAP = null;
+    FORM_MAP = null;                 // 词形反查表随数据变
+    ctxCacheKeysClear();
     VOCAB = {};
     LEVELS.forEach(function (L) { VOCAB[L] = VOCAB_BASE[L].slice(); });
     const cv = customVocab();
@@ -251,20 +253,22 @@
     if (c.lp === undefined) c.lp = 0;
 
     if (c.ph === "l") {
+      // 失误过的词走更长的学习步（多一个当天检查点）：1 分钟 → 10 分钟 → 60 分钟 → 毕业
+      const steps = (c.lp > 0) ? LP_STEPS : LEARN_STEPS;
       if (grade <= 1) {
         // 没想起来 → 退回第一步，当天内重来（而不是等一天后）
         c.st = -1; c.lp++;
         c.i = 0; c.n = 0;
-        c.due = now + LEARN_STEPS[0] * 60000;
+        c.due = now + steps[0] * 60000;
       } else {
         c.st++;
-        if (c.st >= LEARN_STEPS.length) {
+        if (c.st >= steps.length) {
           // 走完全部学习步 → 毕业，进入按天间隔
           c.ph = "r"; c.n = Math.max(1, c.n);
           c.i = 1;
           c.due = now + 86400000;
         } else {
-          c.due = now + LEARN_STEPS[c.st] * 60000;
+          c.due = now + steps[c.st] * 60000;
         }
       }
     } else {
@@ -899,9 +903,11 @@
         // 自主复习：不看到期时间，把学过的词全给出来（已按最该复习的顺序排好，不再打乱）
         st.queue = studiedList(st.lv, st.src, st.lesson, rm === "wrong");
       } else {
-        // 复习：已毕业且到期的词 + 还没走完学习步的词（都属于「待巩固」）
         const rev = dueList(st.lv, st.src, st.lesson).filter(function (v) { return !isLearning(S.cards[v.id]); });
-        st.queue = ld.concat(shuffle(rev));
+        // 失误过的词排最前 —— 在听写/翻译/精读里错过、或评过「忘记/困难」的，最该先补
+        const weak = [], normal = [];
+        rev.forEach(function (v) { ((S.cards[v.id].lp || 0) > 0 ? weak : normal).push(v); });
+        st.queue = ld.concat(shuffle(weak), shuffle(normal));
       }
     } else {
       // 学习：本轮新词（受每日额度）+ 还没走完学习步的词
@@ -1056,22 +1062,24 @@
       }
     }
     // 练习方向 + 注音开关：随手可切，切换后立即重建本轮
-    const cMode = S.settings.cardMode || "word";
+    const cMode = S.settings.cardMode || "auto";
     const kanaOn = S.settings.cardKana !== false;
     h += '<div class="chips">练习：';
     CARD_MODES.forEach(function (m) {
-      h += '<button class="chip' + (cMode === m[0] ? " on" : "") + '" data-cmode="' + m[0] + '">' + m[1] + '</button>';
+      h += '<button class="chip' + (cMode === m[0] ? " on" : "") + '" data-cmode="' + m[0] + '"'
+        + (m[0] === "auto" ? ' title="按熟练度自动切换练法"' : '') + '>' + m[1] + '</button>';
     });
     h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
-    if (cMode === "listen") {
+    if (cMode === "listen" || cMode === "auto") {
       const ap = S.settings.autoPlay !== false;
-      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
+      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
     }
     h += '</div>';
     h += '<div class="tip2">'
-      + (cMode === "listen" ? '🎧 <b>听音辨义</b>：只放发音，不看字 —— 练「听到就能反应出意思」。按 <kbd>S</kbd> 或点 🔊 重听。'
-        : cMode === "mean" ? '✍️ <b>看义想词</b>：看中文，在脑子里拼出日文写法与读音 —— 从「认得」进阶到「用得出」。'
-          : '👁️ <b>看词想义</b>：看词形想意思。')
+      + (cMode === "auto" ? '🪜 <b>自动进阶</b>：新词先「看词想义」建立形义联系 → 复习到 3–4 次自动换「听音辨义」练听力 → 5 次以后「看义想词」练产出。每张卡的信息栏会标出当前练法，想固定用某一种就点上面切换。'
+        : cMode === "listen" ? '🎧 <b>听音辨义</b>：只放发音，不看字 —— 练「听到就能反应出意思」。按 <kbd>S</kbd> 或点 🔊 重听。'
+          : cMode === "mean" ? '✍️ <b>看义想词</b>：看中文，在脑子里拼出日文写法与读音 —— 从「认得」进阶到「用得出」。'
+            : '👁️ <b>看词想义</b>：看词形想意思。')
       + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
       + '</div>';
     h += '<div class="chips">级别：';
@@ -1178,14 +1186,120 @@
     return '<div class="cfront jp"><ruby>' + base + "<rt>" + esc(v.k) + "</rt></ruby></div>";
   }
   function sayWord(v, slow) { if (v) speak(v.k, { kanji: v.w, kana: v.k, mul: slow ? SLOW_RATE : 1 }); }
-  const CARD_MODES = [["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
+  /* ---------- 10c. 记忆增强：客观锚点 / 信号打通 / 方向进阶 / 语境界定 ---------- */
+  /* A. 反应时间：从正面出现到翻面的耗时。
+     「答对但想了 8 秒」和「1 秒内秒懂」不是一回事 —— 现在把耗时作为评分的客观锚点，
+     在按钮上标出建议档位（不强制，只防自欺）。 */
+  let cardShownAt = 0, timedKey = "";
+  function markCardShown(v) {
+    const key = v ? v.id : "";
+    if (key !== timedKey) { timedKey = key; cardShownAt = Date.now(); vs.elapsed = 0; vs.hint = false; }
+  }
+  function elapsedMs() { return cardShownAt ? Math.max(0, Date.now() - cardShownAt) : 0; }
+  /* 建议档位：0 忘记 / 1 困难 / 2 良好 / 3 简单 */
+  function suggestGrade(ms, mode, usedHint) {
+    let g;
+    if (!ms) g = 2;
+    else if (ms < 1500) g = 3;
+    else if (ms < 4000) g = 2;
+    else if (ms < 9000) g = 1;
+    else g = 0;
+    // 翻面前点了朗读 = 听了答案，最多只算「困难」；听音模式本来就要听，不算提示
+    if (usedHint && mode !== "listen") g = Math.min(g, 1);
+    return g;
+  }
+  function fmtSec(ms) { return (Math.max(0, ms) / 1000).toFixed(1); }
+
+  /* C. 练习方向自动进阶：先建立形义联系 → 再练听解 → 最后练产出。
+     只在「刚能认出来」的难度上练，记忆增长最慢，所以难度要跟着熟练度走。 */
+  function dirOf(c) {
+    const m = S.settings.cardMode || "auto";
+    if (m !== "auto") return m;
+    if (!c || isLearning(c)) return "word";        // 还没毕业 → 先建立形义联系
+    const n = c.n || 0;
+    if (n <= 2) return "word";
+    if (n <= 4) return "listen";
+    return "mean";
+  }
+  function dirLabel(d) { return d === "listen" ? "听音辨义" : d === "mean" ? "看义想词" : "看词想义"; }
+
+  /* D. 失误过的词：答错时已经强制「1 分钟后重来」一次了，之后走更长的 10 → 60 分钟，
+     毕业前多一个当天检查点（普通词是 1 → 10 分钟就毕业）。 */
+  const LP_STEPS = [10, 60];
+
+  /* B. 在别处（听写 / 翻译 / 精读填空）判错的词 → 立即回到复习队列。
+     只「提前」不「延后」：不动 ef / n / 已经拉长的间隔，只把 due 拉到当前 + 记一次失误。
+     所以你在任何地方暴露的薄弱点都会回来找你，而已经记牢的词不受影响。 */
+  function flagWeak(id) {
+    const c = S.cards[id];
+    if (!c) return false;                          // 没学过的词不进 SRS
+    c.lp = (c.lp || 0) + 1;
+    if (isLearning(c)) c.st = -1;                  // 学习中的词打回第一步重走
+    c.due = Date.now();                            // 立即到期，下次进队列就会出现
+    save();
+    return true;
+  }
+
+  /* E. 语境绑定：这个词出现在哪篇精读的哪一句；精读里没有，就退到语法库的例句。
+     孤立映射「先生→老师」是浅编码，加上真实句子才是深加工。语料早就有了，只是没连起来。 */
+  const ctxCache = {};
+  function ctxCacheKeysClear() { for (const k in ctxCache) delete ctxCache[k]; }
+  function ctxOf(v) {
+    if (ctxCache[v.id] !== undefined) return ctxCache[v.id];
+    const needles = [];
+    if (v.w && v.w.length >= 2) needles.push(v.w);                      // 汉字优先（长且准）
+    if (!needles.length && v.k && v.k.length >= 3) needles.push(v.k);   // 假名太短会误命中
+    let hit = null;
+    // ① 精读文章：有完整上下文，价值最高
+    for (let i = 0; i < READING.length && !hit; i++) {
+      const a = READING[i];
+      for (let j = 0; j < a.s.length; j++) {
+        const s = a.s[j];
+        if (!s.j) continue;
+        for (let n = 0; n < needles.length; n++) {
+          if (s.j.indexOf(needles[n]) >= 0) { hit = { kind: "read", a: a, s: s }; break; }
+        }
+        if (hit) break;
+      }
+    }
+    // ② 语法库例句：覆盖面大得多，作为兜底
+    if (!hit && needles.length) {
+      for (let i = 0; i < GRAMMAR.length && !hit; i++) {
+        const g = GRAMMAR[i];
+        if (!g.e) continue;
+        for (let n = 0; n < needles.length; n++) {
+          if (g.e.indexOf(needles[n]) >= 0) { hit = { kind: "gram", g: g, s: { j: g.e, z: g.t } }; break; }
+        }
+      }
+    }
+    ctxCache[v.id] = hit;
+    return hit;
+  }
+
+  /* 词形 → 词 的反查表（懒加载）。精读填空挖掉的可能正是一个词，那就让它回到复习队列。 */
+  let FORM_MAP = null;
+  function formMap() {
+    if (FORM_MAP) return FORM_MAP;
+    const m = {};
+    LEVELS.forEach(function (L) {
+      VOCAB[L].forEach(function (v) {
+        if (v.w && !m[v.w]) m[v.w] = v;
+        if (v.k && !m[v.k]) m[v.k] = v;
+      });
+    });
+    FORM_MAP = m;
+    return m;
+  }
+
+  const CARD_MODES = [["auto", "自动进阶"], ["word", "看词想义"], ["listen", "听音辨义"], ["mean", "看义想词"]];
   function renderCard() {
     const box = $("#vcard"); if (!box) return;
     if (vs.idx >= vs.queue.length) refillLearn(vs);          // 刚到期的学习步词补到队尾
     if (vs.idx >= vs.queue.length) { box.innerHTML = doneHTML(); return; }
     const v = vs.queue[vs.idx];
     const c = S.cards[v.id];
-    const mode = S.settings.cardMode || "word";
+    const mode = dirOf(c);              // 自动进阶：按熟练度选练法（顶部按钮可覆盖为固定方向）
+    markCardShown(v);                   // 记录正面出现时刻，翻面时算反应时间
     const showKana = S.settings.cardKana !== false;
     const srcLab = v.custom ? "我的词库"
       : v.book ? bookName(v.src) + " 第" + v.l + "课"
@@ -1195,7 +1309,9 @@
     else if (isLearning(c)) stateLab = "　<b>学习中</b>" + (c.lp ? " ·失误 " + c.lp + " 次" : "");
     else stateLab = "　复习 #" + c.n;
     const meta = v.lv + "　" + srcLab + "　" + esc(v.p || "")
-      + stateLab + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
+      + stateLab
+      + (S.settings.cardMode === "auto" ? "　<b>" + dirLabel(mode) + "</b>" : "")
+      + (S.wrong.indexOf(v.id) >= 0 ? "　⚠ 错词" : "");
     const hasLive = hasHuman(v.w, v.k) ? '<span class="badge-live">真人</span>' : "";
     const sayBtn = function (bid) { return '<button class="chip" id="' + bid + '">🔊 朗读（S）' + hasLive + "</button>"; };
 
@@ -1222,16 +1338,37 @@
       + (mode === "listen" ? "先只听声音回忆，别急着看字 · " : mode === "mean" ? "先在脑子里拼出日文，再翻面 · " : "先自己回忆意思，再翻面 · ")
       + '快捷键 <kbd>1</kbd>忘记 <kbd>2</kbd>困难 <kbd>3</kbd>良好 <kbd>4</kbd>简单 <kbd>S</kbd>重听</div></div>';
 
-    // 背面：永远是完整信息（词 + 注音 + 释义 + 朗读）
+    // 背面：完整信息（词 + 注音 + 释义 + 朗读）+ 客观评分锚点 + 语境例句
+    const elapsed = vs.elapsed || 0;
+    const sg = suggestGrade(elapsed, mode, vs.hint);
+    const GNAMES = ["忘记", "困难", "良好", "简单"];
+    const gbtn = function (cls, g, key) {
+      return '<button class="g ' + cls + (elapsed && sg === g ? " rec" : "") + '" data-g="' + g + '">'
+        + GNAMES[g] + '<kbd>' + key + '</kbd></button>';
+    };
     h += '<div class="cface cback"><div class="cmeta">' + meta + "</div>" + wordHTML(v, true);
     h += '<div class="cmean">' + esc(v.z) + "</div>";
     h += sayBtn("vsay2");
+    if (elapsed) {
+      h += '<div class="gtime">你用了 <b>' + fmtSec(elapsed) + '</b> 秒'
+        + (vs.hint ? '（用了提示）' : '')
+        + ' → 建议评「<b>' + GNAMES[sg] + '</b>」</div>';
+    }
     h += '<div class="grades">'
-      + '<button class="g again" data-g="0">忘记<kbd>1</kbd></button>'
-      + '<button class="g hard" data-g="1">困难<kbd>2</kbd></button>'
-      + '<button class="g good" data-g="2">良好<kbd>3</kbd></button>'
-      + '<button class="g easy" data-g="3">简单<kbd>4</kbd></button></div>';
-    h += '<div class="hint">评「忘记/困难」→ <b>1 分钟后</b>当天再来一次；连续答对两次才算学会，之后才按天间隔排复习</div></div>';
+      + gbtn("again", 0, "1") + gbtn("hard", 1, "2") + gbtn("good", 2, "3") + gbtn("easy", 3, "4")
+      + '</div>';
+    h += '<div class="hint">评「忘记/困难」→ <b>1 分钟后</b>当天再来一次；走完学习步才按天间隔排复习</div>';
+    const cx = ctxOf(v);
+    if (cx) {
+      const from = cx.kind === "read"
+        ? '出自「' + esc(cx.a.t) + '」'
+        : '语法例句 · ' + esc(cx.g.n);
+      h += '<div class="ctxbox"><div class="ctxhead"><span class="ctxtag">例句</span>' + from + '</div>'
+        + '<div class="ctxj jp">' + esc(cx.s.j) + '</div>'
+        + (cx.s.z ? '<div class="ctxz">' + esc(cx.s.z) + '</div>' : '')
+        + '</div>';
+    }
+    h += "</div>";
     h += "</div>";
     h += '<div class="combo"></div>';
     box.innerHTML = h;
@@ -1765,7 +1902,7 @@
     const v = dct.q;
     const ok = matchWord(v, inp.value);
     dct.r += ok ? 1 : 0; dct.w += ok ? 0 : 1;
-    if (!ok) pushWrong(v.id); else popWrong(v.id);
+    if (!ok) { pushWrong(v.id); flagWeak(v.id); } else popWrong(v.id);
     dct.revealed = true;
     save(); act();
     let h = '<span class="' + (ok ? "ok" : "no") + '">' + (ok ? "✓ 正确" : "✗ 正确：" + esc(v.w || v.k) + "（" + esc(v.k) + "）") + '</span>';
@@ -2336,6 +2473,7 @@
       S.settings.cardMode = A("data-cmode"); save();
       lastSpokenId = null;                    // 允许新模式重新自动播放
       vs.show = false;                        // 换练法 → 这张卡从正面重看一遍，但不换词
+      timedKey = "";                          // 换了练法 → 反应时间重新计时
       render(); return;
     }
     if (A("data-ckana") !== null) {
@@ -2345,9 +2483,14 @@
       S.settings.autoPlay = A("data-cautoplay") === "1"; save(); render(); return;
     }
     if (t.id === "vsay" || t.id === "vsay2" || t.id === "vsay3" || t.id === "vsay4") {
+      // 在正面点朗读 = 听了答案，算「用了提示」（听音模式本来就要听，不算）
+      if (t.id === "vsay" && !vs.show) vs.hint = true;
       sayWord(vs.queue[vs.idx], t.id === "vsay4"); return;
     }
-    if (t.id === "vshow") { vs.show = true; renderCard(); return; }
+    if (t.id === "vshow") {
+      if (!vs.show) vs.elapsed = elapsedMs();     // 翻面瞬间结算反应时间
+      vs.show = true; renderCard(); return;
+    }
     if (A("data-g")) {
       const id = vs.queue[vs.idx].id, g = parseInt(A("data-g"), 10);
       review(id, g);
@@ -2436,7 +2579,7 @@
       trn.picked = trn.opts.indexOf(sel);
       const ok = sel === trn.q.z;
       trn.r += ok ? 1 : 0; trn.w += ok ? 0 : 1;
-      if (!ok) pushWrong(trn.q.id); else popWrong(trn.q.id);
+      if (!ok) { pushWrong(trn.q.id); flagWeak(trn.q.id); } else popWrong(trn.q.id);
       save(); act(); renderTrans(); return;
     }
     if (t.id === "trsay") { playWord(trn.q); return; }
@@ -2445,7 +2588,7 @@
       const inp = $("#trin"); if (!inp) return;
       const ok = matchWord(trn.q, inp.value);
       trn.r += ok ? 1 : 0; trn.w += ok ? 0 : 1;
-      if (!ok) pushWrong(trn.q.id); else popWrong(trn.q.id);
+      if (!ok) { pushWrong(trn.q.id); flagWeak(trn.q.id); } else popWrong(trn.q.id);
       save(); act();
       const res = $("#trres");
       if (res) res.innerHTML = '<span class="' + (ok ? "ok" : "no") + '">' + (ok ? "✓ 正确" : "✗ 正确：" + esc(trn.q.w || trn.q.k) + "（" + esc(trn.q.k) + "）") + '</span><div class="tip">' + esc(trn.q.z) + '</div>';
@@ -2511,6 +2654,11 @@
       const bs = blanksOf(rd.cur), s = rd.cur.s[bs[rd.bi]];
       const ok = matchBlank(s.b, inp.value);
       rd.br += ok ? 1 : 0; rd.bw += ok ? 0 : 1; rd.rev = true;
+      // 挖空答案如果本身是一个词（很多搭配就是），也让它回到复习队列
+      if (!ok) {
+        const w = formMap()[s.b.a];
+        if (w) { pushWrong(w.id); flagWeak(w.id); }
+      }
       const res = $("#rdres");
       if (res) {
         res.innerHTML = '<span class="' + (ok ? "ok" : "no") + '">'
@@ -2642,11 +2790,17 @@
       } else if (k === "Enter") { nextKana(); renderKanaQ(); }
       else if (k === "s" || k === "S") { speak(kanaQ.ex || kanaQ.ans || ""); }
     } else if (r === "learn" || r === "review" || r === "vocab") {
-      if (k === " ") { e.preventDefault(); if (vs.idx < vs.queue.length) { vs.show = !vs.show; renderCard(); } }
+      if (k === " ") {
+        e.preventDefault();
+        if (vs.idx < vs.queue.length) {
+          if (!vs.show) vs.elapsed = elapsedMs();   // 翻到背面 → 结算反应时间
+          vs.show = !vs.show; renderCard();
+        }
+      }
       else if (k >= "1" && k <= "4") {
         const b = document.querySelector('#vcard .g[data-g="' + (parseInt(k, 10) - 1) + '"]');
         if (b) b.click();
-        else if (vs.idx < vs.queue.length) { vs.show = true; renderCard(); }
+        else if (vs.idx < vs.queue.length) { vs.elapsed = elapsedMs(); vs.show = true; renderCard(); }
       } else if (k === "s" || k === "S") { sayWord(vs.queue[vs.idx]); }
     } else if (r === "drill") {
       if (k === "Enter") { const b = document.getElementById("dok") || document.getElementById("dnext"); if (b) b.click(); }
@@ -2827,12 +2981,21 @@
 
   /* ---------- 15. 启动 ---------- */
   rollDay();
+  // 一次性迁移：默认练习方向改为「自动进阶」。
+  // 旧存档若还是「看词想义」就升级过来；明确选过「听音 / 看义」的不动。
+  if (!S.settings.dirV2) {
+    if (!S.settings.cardMode || S.settings.cardMode === "word") S.settings.cardMode = "auto";
+    S.settings.dirV2 = 1;
+    save();
+  }
   rebuildAll();
   globalThis.__JP__ = { conj: conj, conjAdj: conjAdj, get VOCAB() { return VOCAB; }, get VERBS() { return VERBS; }, ADJS: ADJS, get GRAMMAR() { return GRAMMAR; }, KANA: KANA, state: function () { return S; }, hasHuman: hasHuman, humanCandidates: humanCandidates, bestVoiceName: function () { const v = bestVoice(); return v ? v.name : null; }, rebuildAll: rebuildAll, addCustom: addCustom, masuToDict: masuToDict, playHuman: playHuman, tts: tts, speak: speak, normAns: normAns, matchWord: matchWord, drillPool: drillPool, buildQueue: buildQueue, queueNote: queueNote, get rd() { return rd; }, get tb() { return tb; }, TEXTBOOK: TEXTBOOK, viewTextbook: viewTextbook, gramsByLesson: gramsByLesson, READING: READING, blanksOf: blanksOf, matchBlank: matchBlank, viewRead: viewRead, readListHTML: readListHTML, readStageHTML: readStageHTML, saySentence: saySentence, playAll: playAll, realSentences: realSentences, playWord: playWord, SLOW_RATE: SLOW_RATE, blankStageHTML: blankStageHTML, quizStageHTML: quizStageHTML, doneHTML: doneHTML, nextDueInfo: nextDueInfo, fmtWhen: fmtWhen, insertAnswer: insertAnswer, answerHTML: answerHTML, checkDict: checkDict, nextDict: nextDict, nextTrans: nextTrans, get vs() { return vs; }, get ls() { return ls; }, get rs() { return rs; }, setStateFor: setStateFor, viewLearn: viewLearn, viewReview: viewReview, booksIn: booksIn, bookName: bookName, inScope: inScope, scopeLabel: scopeLabel, otherScopeHint: otherScopeHint, modeCounts: modeCounts, newList: newList, dueList: dueList, savedLv: savedLv, viewVocab: viewVocab,
     studiedList: studiedList, studiedCount: studiedCount, RMODES: RMODES,
     get sv() { return sv; }, viewStudied: viewStudied, learnedRows: learnedRows,
     learnedStats: learnedStats, dueLabel: dueLabel, SV_STATES: SV_STATES, SV_SORTS: SV_SORTS,
-    LEARN_STEPS: LEARN_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
+    LEARN_STEPS: LEARN_STEPS, LP_STEPS: LP_STEPS, isLearning: isLearning, learnDue: learnDue, learnStat: learnStat, refillLearn: refillLearn,
+    dirOf: dirOf, dirLabel: dirLabel, suggestGrade: suggestGrade, elapsedMs: elapsedMs,
+    flagWeak: flagWeak, ctxOf: ctxOf, formMap: formMap, setTimedKey: function (k) { timedKey = k; },
     sayWord: sayWord, wordHTML: wordHTML, CARD_MODES: CARD_MODES, render: render, review: review, cardOf: cardOf, renderCard: renderCard, get dct() { return dct; }, get trn() { return trn; }, isCached: isCached, warmAudio: warmAudio, cachedCount: cachedCount, clearAudioCache: clearAudioCache, resetJaWarn: function () { NO_JA_WARNED = false; } };
   window.addEventListener("hashchange", render);
   render();
