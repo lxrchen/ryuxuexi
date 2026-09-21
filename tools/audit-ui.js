@@ -345,5 +345,38 @@ console.log("\n[6] 样式：媒体查询覆盖与潜在溢出");
   ok("长文本换行检查完成（合并选择器已纳入判定）");
 }
 
+/* ============ 7. 构建产物：本地单文件版不能在 file:// 下报错 ============ */
+console.log("\n[7] 构建产物：file:// 兼容性");
+{
+  const localFile = path.join(ROOT, "..", "日语学习站_单文件版.html");
+  if (!fs.existsSync(localFile)) {
+    warn("没找到「日语学习站_单文件版.html」（先跑 node build.js 才有）");
+  } else {
+    const h = fs.readFileSync(localFile, "utf8");
+    // file:// 下浏览器以 CORS 为由拒绝一切外部资源 → 单文件版必须零外链。
+    // 症状是控制台 4~5 条红字（manifest 被 CORS 拦、icon.svg 404），
+    // 页面本身能跑，但用户会以为坏了。
+    if (/<link rel="manifest"/.test(h)) {
+      bad("单文件版仍引用 manifest —— file:// 下必定被 CORS 拦（控制台红字）");
+    } else { ok("单文件版未引用 manifest"); }
+    if (/href="\.\/icon\.svg"/.test(h)) {
+      bad("单文件版仍外链 icon.svg —— 该文件不在它旁边，会 404");
+    } else { ok("单文件版未外链 icon.svg"); }
+    if (h.indexOf('rel="icon" href="data:image/svg+xml,') < 0) {
+      bad("单文件版的图标没有内联成 data URI（favicon 会空）");
+    } else { ok("单文件版图标已内联（favicon 正常，无 404）"); }
+    if (h.indexOf("<title>日语学习站") < 0) bad("单文件版标题异常（可能编码坏了）");
+    else ok("单文件版编码正常");
+  }
+  // 部署版相反：必须保留 manifest（PWA 安装要用）
+  const distIdx = path.join(ROOT, "dist", "index.html");
+  if (fs.existsSync(distIdx)) {
+    const d = fs.readFileSync(distIdx, "utf8");
+    if (!/<link rel="manifest" href="\.\/manifest\.webmanifest"/.test(d)) {
+      bad("部署版丢了 manifest 引用 —— PWA 无法安装");
+    } else { ok("部署版保留了 manifest（PWA 可安装）"); }
+  }
+}
+
 console.log("\n" + (problems ? "✗" : "✓") + " 自检结束：" + problems + " 个问题 / " + notes + " 个提示");
 process.exitCode = problems ? 1 : 0;
