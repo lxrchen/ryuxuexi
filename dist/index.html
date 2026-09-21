@@ -17,7 +17,21 @@
   --ac:#8b83f0; --ac2:#4fd1a5; --warn:#f2b34b; --err:#f2645a; --pink:#e879a8;
   --sh:0 4px 20px rgba(0,0,0,.28);
   --jp:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo","Microsoft YaHei",sans-serif;
+  /* 关键：告诉浏览器「这是暗色页面」。
+     Edge / Chrome 在 Windows 上会据此把滚动条、原生下拉、日期选择器等画成暗色；
+     不写的话滚动条会是浅色（暗色页面上非常扎眼）—— 这正是 Edge 下最明显的一处不协调。 */
+  color-scheme:dark;
 }
+/* 滚动条（Chromium / Edge / Safari）：细、低对比，不抢视线 */
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:8px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:#48506a;background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+/* Firefox */
+*{scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+/* 键盘焦点框：统一用主题色，别用浏览器默认的蓝框 */
+:focus-visible{outline:2px solid var(--ac);outline-offset:2px;border-radius:6px}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:
@@ -67,6 +81,11 @@ main{max-width:1020px;margin:0 auto;padding:20px 24px 90px;min-height:70vh}
 .btn.ghost{background:transparent;border:1px solid var(--bd2);color:var(--tx2);box-shadow:none}
 .btn.sm{padding:5px 12px;font-size:13px}
 .chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+/* 课次（chips-scroll）可能有 20+ 个：始终收成**一行横向滚动**。
+   折行的话桌面占 3 行、手机占 3 行，把真正要练的卡片一路挤到屏幕外。 */
+.chips-scroll{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;white-space:nowrap;
+  padding-bottom:4px;scroll-behavior:smooth}
+.chips-scroll>*{flex:0 0 auto}
 .chip{background:var(--bg2);border:1px solid var(--bd);color:var(--tx2);border-radius:20px;padding:6px 14px;
   font-size:13px;cursor:pointer;transition:.15s}
 .chip:hover{border-color:var(--ac);color:var(--tx)}
@@ -136,12 +155,27 @@ main{max-width:1020px;margin:0 auto;padding:20px 24px 90px;min-height:70vh}
 .combo b{font-size:19px}
 
 /* 单词卡（3D 翻转） */
-.card{margin:16px 0;perspective:1400px}
-.cwrap{position:relative;min-height:250px;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,.2,.2,1)}
+/* 卡片收窄居中：一张记忆卡铺满 1020px 会到处是空白，按钮还会被拉成整行宽 */
+.card{margin:16px auto;max-width:660px;perspective:1400px}
+.cwrap{position:relative;min-height:250px;transform-style:preserve-3d;
+  transition:transform .5s cubic-bezier(.4,.2,.2,1)}
 .card.flipped .cwrap{transform:rotateY(180deg)}
-.cface{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+/* align-items:center —— 否则 flex 子项默认横向拉满，
+   于是「🔊 朗读」这类 chip 会变成一整条通栏按钮，很难看 */
+.cface{position:absolute;top:0;left:0;width:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;
   background:linear-gradient(160deg,var(--bg2),var(--bg3));border:1px solid var(--bd);border-radius:18px;
-  padding:26px;text-align:center;box-shadow:var(--sh);display:flex;flex-direction:column;justify-content:center}
+  padding:26px;text-align:center;box-shadow:var(--sh);
+  display:flex;flex-direction:column;justify-content:center;align-items:center}
+/* 只让「当前可见的那一面」回到文档流，容器高度才会跟着它走。
+   两面都用绝对定位的话，容器高度永远只有 min-height —— 内容一多就溢出到卡片边框外
+   （原先那句快捷键提示就跑到卡片外面去了）。
+   两面都参与高度计算也不行：容器取两者最大值，正面会挂着一大片空白。
+   → 可见面 position:relative（贡献高度），另一面 absolute（不贡献）。 */
+.card:not(.flipped) .cwrap>.cface:not(.cback),
+.card.flipped .cwrap>.cback{position:relative}
+/* 这几个需要占满卡片宽度（换行、网格、左对齐的框） */
+.cmeta,.coptbox,.cres,.pronbox,.ctxbox,.grades{align-self:stretch}
+.grades{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
 .cback{transform:rotateY(180deg)}
 .cmeta{font-size:12px;color:var(--tx3);margin-bottom:14px}
 .cfront{font-size:40px;margin:10px 0;font-family:var(--jp)}
@@ -374,6 +408,34 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 .ctxj,.ctxz,.rj,.rk,.rz,.rblank,.svword,.svzh,.gname,.gmean,.cmean,.gex,.gtr,
 .rsp,.rnum,.tbtopic,.tbgram,.qtitle,.rj2{overflow-wrap:break-word;word-break:break-word}
 
+/* ===== 窄屏适配 =====
+   问题背景：导航有 14 项，手机上会折成 4 行，把正文挤到第二屏；
+   课次筛选有 20+ 个 chip，又会占 3 行 —— 加起来「要滚三屏才见到一个单词」。
+   解法：导航与长 chip 行在窄屏收成**一行横向滚动**（手机上的常规做法），
+   而不是任其折行。 */
+@media(max-width:860px){
+  .top{padding:10px 14px;gap:9px}
+  .brand{font-size:15.5px}
+  .brand span{display:none}                 /* 副标题在窄屏省略，省一行高度 */
+  .nav{width:100%;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;
+    padding-bottom:3px;scrollbar-width:none;-ms-overflow-style:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{white-space:nowrap;flex:0 0 auto;padding:6px 12px;font-size:13.5px}
+  main{padding:16px 14px 80px}
+  .foot{padding:16px 14px 36px}
+}
+/* 窄屏：所有 chip 行都收成单行横滑（练习/级别/来源/课次…），
+   否则光是筛选就占掉两屏。桌面只对 .chips-scroll 这么做（见上面的规则定义处）。 */
+@media(max-width:860px){
+  .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;padding-bottom:2px;
+    /* nowrap 是必需的：否则「练习：」这种前置标签会被压成竖排的单字（练/习：） */
+    white-space:nowrap}
+  .chips::-webkit-scrollbar{display:none}
+  .chips>*{flex:0 0 auto}
+  /* 但搜索框要占满，不能被压成一小截 */
+  .chips>.inp{flex:1 1 100%}
+}
+
 @media(max-width:640px){
   .rsay{width:26px;height:26px;font-size:11px}
   .rline{gap:9px;padding:11px 12px}
@@ -385,6 +447,25 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   .copt{padding:10px 8px;font-size:14.5px;min-height:44px;border-radius:10px}
   .cres{gap:9px;font-size:12.5px;padding:9px 11px}
   .pronbox{padding:10px 11px}
+  /* 五十音选择题（选项短）：窄屏排成 2×2，别出现「3 个 + 1 个」的失衡排布。
+     只给 .opts-short 用 —— 翻译 / 精读理解题的选项是长句子，改成两列会被挤扁。 */
+  .opts-short{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+  .opts-short .opt{width:100%;min-width:0;padding:11px 8px}
+  .opts-short .opt.big{font-size:26px;padding:12px 8px}
+  /* 首页进度环：窄屏缩小，让环与文字并排一行（原先会换行，白白占掉一百多像素） */
+  .ringwrap{padding:14px 16px;gap:14px}
+  .ring{width:76px;height:76px}
+  .ring span{font-size:16px}
+  .ringinfo{min-width:0}
+  /* 卡片：小屏上减少内边距，字也跟着收 */
+  .cface{padding:18px 14px;border-radius:14px}
+  .cwrap{min-height:220px}
+  .cfront{font-size:33px}
+  .cmean{font-size:19px;margin:12px 0}
+  .bigsay{width:84px;height:84px;font-size:31px}
+  .g{padding:9px 14px;font-size:13px}
+  .g kbd{display:none}
+  h2{font-size:19px;margin:18px 0 12px}
 }
 
 /* ===== 听选（听音选答）：选项按钮 ===== */
@@ -440,7 +521,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-21 11:49
+  <br>版本：2026-09-21 12:14
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -7432,12 +7513,12 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       h += '<button class="opt big" data-kans="' + esc(kanaQ.b) + '">' + esc(kanaQ.b) + '</button>';
       h += '</div><p class="tip">区分：' + esc(kanaQ.hint) + '</p>';
     } else if (kanaQ.kind === "read") {
-      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts">';
+      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts opts-short">';
       kanaQ.opts.forEach(function (o) { h += '<button class="opt" data-kans="' + esc(o) + '">' + esc(o) + '</button>'; });
       h += '</div><p class="tip">字源：' + (kanaQ.src || "—") + '　例词：' + esc(kanaQ.ex) + '（' + esc(kanaQ.exz) + '）</p>';
       h += '<button class="chip" id="kplay">🔊 朗读例词</button>';
     } else {
-      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts">';
+      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts opts-short">';
       kanaQ.opts.forEach(function (o) { h += '<button class="opt big" data-kans="' + esc(o) + '">' + esc(o) + '</button>'; });
       h += '</div><p class="tip">字源：' + (kanaQ.src || "—") + '　例词：' + esc(kanaQ.ex) + '（' + esc(kanaQ.exz) + '）</p>';
     }
@@ -7708,7 +7789,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     }
     // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
     if (!hasBooks || st.src !== "") {
-      h += '<div class="chips">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
+      // chips-scroll：课次可能有 20+ 个，窄屏收成一行横向滚动，别把卡片挤到屏幕外
+      h += '<div class="chips chips-scroll">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
       const lessons = [];
       VOCAB[st.lv].forEach(function (v) {
         if (!inScope(v, st.src, 0)) return;
@@ -8498,7 +8580,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       h += '</div>';
     }
     if (sv.lv && (!hasBooks || sv.src !== "")) {
-      h += '<div class="chips">课次：<button class="chip' + (sv.lesson === 0 ? " on" : "") + '" data-svl="">全部</button>';
+      h += '<div class="chips chips-scroll">课次：<button class="chip' + (sv.lesson === 0 ? " on" : "") + '" data-svl="">全部</button>';
       const lessons = [];
       VOCAB[sv.lv].forEach(function (v) {
         if (!S.cards[v.id] || !inScope(v, sv.src, 0)) return;

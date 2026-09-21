@@ -289,7 +289,8 @@ console.log("\n[6] 样式：媒体查询覆盖与潜在溢出");
   newish.forEach((c) => {
     if (css.indexOf("." + c) < 0) bad("样式里找不到 ." + c);
   });
-  const sized = ["svrow", "svword", "svsay", "rsay", "cfront", "qtitle"];
+  const sized = ["svrow", "svword", "svsay", "rsay", "cfront", "qtitle",
+    "cface", "coptbox", "ring"];   // 卡片正反面 / 听选选项 / 首页进度环
   const unhandled = sized.filter((c) => mqAll.indexOf("." + c) < 0);
   if (unhandled.length) warn("窄屏未单独调整字号/尺寸（若用了固定大字号需确认）：" + unhandled.join(", "));
   else ok("窄屏对关键元素都有单独调整");
@@ -304,6 +305,12 @@ console.log("\n[6] 样式：媒体查询覆盖与潜在溢出");
     }
   });
   ok("flex 换行检查完成");
+
+  // 课次这类长 chip 行必须收成单行横滑 —— 否则 20+ 个 chip 折成 3 行，
+  // 把真正要练的卡片一路挤出屏幕（手机上要滚三屏才见到一个单词）
+  if (!/\.chips-scroll\{[^}]*flex-wrap:nowrap/.test(css)) {
+    bad(".chips-scroll 缺 flex-wrap:nowrap（长 chip 行会折成多行，挤走卡片）");
+  } else { ok("长 chip 行（课次）已设为单行横滑"); }
 
   // 可能撑破容器的长文本
   // ⚠️ 必须把「合并选择器」算进来：换行保护常写成

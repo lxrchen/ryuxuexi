@@ -839,12 +839,12 @@
       h += '<button class="opt big" data-kans="' + esc(kanaQ.b) + '">' + esc(kanaQ.b) + '</button>';
       h += '</div><p class="tip">区分：' + esc(kanaQ.hint) + '</p>';
     } else if (kanaQ.kind === "read") {
-      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts">';
+      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts opts-short">';
       kanaQ.opts.forEach(function (o) { h += '<button class="opt" data-kans="' + esc(o) + '">' + esc(o) + '</button>'; });
       h += '</div><p class="tip">字源：' + (kanaQ.src || "—") + '　例词：' + esc(kanaQ.ex) + '（' + esc(kanaQ.exz) + '）</p>';
       h += '<button class="chip" id="kplay">🔊 朗读例词</button>';
     } else {
-      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts">';
+      h += '<div class="qtitle big2">' + esc(kanaQ.disp) + '</div><div class="opts opts-short">';
       kanaQ.opts.forEach(function (o) { h += '<button class="opt big" data-kans="' + esc(o) + '">' + esc(o) + '</button>'; });
       h += '</div><p class="tip">字源：' + (kanaQ.src || "—") + '　例词：' + esc(kanaQ.ex) + '（' + esc(kanaQ.exz) + '）</p>';
     }
@@ -1115,7 +1115,8 @@
     }
     // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
     if (!hasBooks || st.src !== "") {
-      h += '<div class="chips">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
+      // chips-scroll：课次可能有 20+ 个，窄屏收成一行横向滚动，别把卡片挤到屏幕外
+      h += '<div class="chips chips-scroll">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
       const lessons = [];
       VOCAB[st.lv].forEach(function (v) {
         if (!inScope(v, st.src, 0)) return;
@@ -1905,7 +1906,7 @@
       h += '</div>';
     }
     if (sv.lv && (!hasBooks || sv.src !== "")) {
-      h += '<div class="chips">课次：<button class="chip' + (sv.lesson === 0 ? " on" : "") + '" data-svl="">全部</button>';
+      h += '<div class="chips chips-scroll">课次：<button class="chip' + (sv.lesson === 0 ? " on" : "") + '" data-svl="">全部</button>';
       const lessons = [];
       VOCAB[sv.lv].forEach(function (v) {
         if (!S.cards[v.id] || !inScope(v, sv.src, 0)) return;
