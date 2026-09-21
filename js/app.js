@@ -2644,7 +2644,8 @@
       if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi], t.id === "rdplaycurslow"); }
       return;
     }
-    if (t.id === "rdrestart") {
+    // 注意：这两个按钮生成的是 data-rdrestart（没有 id）—— 只判 t.id 会点不动
+    if (t.id === "rdrestart" || A("data-rdrestart") !== null) {
       rd.stage = "read"; rd.bi = 0; rd.br = 0; rd.bw = 0; rd.rev = false;
       rd.qi = 0; rd.qr = 0; rd.qw = 0; rd.pick = -1; render(); return;
     }

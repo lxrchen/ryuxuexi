@@ -370,6 +370,18 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 .ctxj{font-size:15px;line-height:1.75;color:var(--tx);font-family:var(--jp)}
 .ctxz{font-size:12.5px;line-height:1.7;color:var(--tx2);margin-top:3px}
 
+/* 长文本换行兜底：日文无空格，遇到连续长串（长假名、URL、拉丁字母）时防横向溢出 */
+.ctxj,.ctxz,.rj,.rk,.rz,.rblank,.svword,.svzh,.gname,.gmean,.cmean,.gex,.gtr,
+.rsp,.rnum,.tbtopic,.tbgram,.qtitle,.rj2{overflow-wrap:break-word;word-break:break-word}
+
+@media(max-width:640px){
+  .rsay{width:26px;height:26px;font-size:11px}
+  .rline{gap:9px;padding:11px 12px}
+  .ctxbox{padding:10px 11px}
+  .gtime{font-size:11.5px}
+  .rblank{font-size:17px}
+}
+
 </style>
 </head>
 <body>
@@ -395,7 +407,7 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-21 10:11
+  <br>版本：2026-09-21 10:21
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -7918,7 +7930,8 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       if (rd.cur) { const bs = blanksOf(rd.cur); saySentence(rd.cur, bs[rd.bi], t.id === "rdplaycurslow"); }
       return;
     }
-    if (t.id === "rdrestart") {
+    // 注意：这两个按钮生成的是 data-rdrestart（没有 id）—— 只判 t.id 会点不动
+    if (t.id === "rdrestart" || A("data-rdrestart") !== null) {
       rd.stage = "read"; rd.bi = 0; rd.br = 0; rd.bw = 0; rd.rev = false;
       rd.qi = 0; rd.qr = 0; rd.qw = 0; rd.pick = -1; render(); return;
     }
