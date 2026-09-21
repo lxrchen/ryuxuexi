@@ -10,17 +10,25 @@
 
 用法
   python tools/render-pdf.py <PDF路径> <输出目录> <页码...>
-  python tools/render-pdf.py book.pdf out 44 54 64        # 单页渲染
-  python tools/render-pdf.py book.pdf out sheet:330 345  # 生成联系表（定位用）
-  python tools/render-pdf.py --sheet book.pdf out 330-360 # 页码范围联系表
+  python tools/render-pdf.py book.pdf out 44 54 64         # 单页渲染
+  python tools/render-pdf.py --sheet book.pdf out 330-360  # 页码范围联系表（定位用）
+  python tools/render-pdf.py --calibrate book.pdf out 100,260  # 页脚拼图，校准偏移
 
 页码：**PDF 页码（1 起）**，不是书上页码。书上页码 + 偏移 = PDF 页码，
-      偏移必须先用「渲染一页读页脚」校准（各册不同，实测初级上/下 +17、中级上 +12）。
+      偏移必须先用 --calibrate 渲染页脚校准
+      （六册实测 17 / 16 / 13 / 15 / 16 / 12 —— **毫无规律，必须逐册校准**）。
 
 两条铁律（踩过坑，别省）
   1. 读内容用 **一页一图 1400px**。一屏拼多页会把邻页内容误读成当前页。
   2. 画布宽度超过约 1600px 会被压缩，反而更糊 —— 1400px 是清晰度上限的最优解。
   联系表（--sheet）只用于**定位**（找目录页、找生词表在第几页），不要用来读正文。
+
+校准偏移的要点（--calibrate 输出一张页脚拼图，用眼看数字）
+  - 每册至少取 **2 个采样点**互证；两点算出的 offset 一致才能确认为常量
+  - ⚠️ **奇偶校验**：中文/日文书的页码 **偶数页在左、奇数页在右**。
+    若某页页码出现在左边，书页必为偶数 —— 可用来排除「30 误读成 31」这类错。
+    扫描质量差时边缘数字会糊（`30` 看着像 `3(`），靠奇偶反推最可靠。
+  - 跨度大的书建议多采几个点：同一本书里 offset 可能因插页而突变
 
 依赖：pip install pypdfium2 pillow
 """
@@ -78,6 +86,36 @@ def make_sheet(pdf_path, out_dir, pages, thumb_w=330, cols=4):
     print("saved", f, cv.size)
 
 
+def make_footer_sheet(pdf_path, out_dir, pages, width=1000, band=0.88):
+    """把各页的**底部条带**裁出来纵向拼一张图 —— 一次读完所有页脚页码，用于校准偏移。
+
+    为什么不用缩略图：页脚数字很小，缩略图里读不准，而误读一个数字会让整册页码全错。
+    底部条带保留原始像素宽度放大，数字大到能看清，同时一次只看一张图（省往返）。
+    """
+    from PIL import Image, ImageDraw
+    os.makedirs(out_dir, exist_ok=True)
+    pdf = _load(pdf_path)
+    strips = []
+    for p in pages:
+        im = pdf[p - 1].render(scale=2.6).to_pil().convert("RGB")
+        w, h = im.size
+        im = im.resize((width, int(h * width / w)), Image.LANCZOS)
+        w, h = im.size
+        strips.append(("PDF p%d" % p, im.crop((0, int(h * band), w, h))))
+    ch = max(s.size[1] for _, s in strips)
+    cv = Image.new("RGB", (width, len(strips) * (ch + 22)), "white")
+    d = ImageDraw.Draw(cv)
+    for k, (label, s) in enumerate(strips):
+        y = k * (ch + 22)
+        d.text((4, y + 5), label, fill="black")
+        cv.paste(s, (0, y + 20))
+    f = os.path.join(out_dir, "footers.png")
+    cv.save(f)
+    print("saved", f, cv.size)
+    print("读法：每条的页码数字 → 偏移 = PDF页码 − 书上页码。")
+    print("奇偶校验：页码在**左**边 → 书页为偶数；在**右**边 → 书页为奇数。")
+
+
 def parse_range(spec):
     """'90' -> [90]; '330-360' -> [330..360]; '44,54' -> [44,54]"""
     out = []
@@ -100,7 +138,10 @@ if __name__ == "__main__":
     if len(args) < 3:
         print(USAGE)
         sys.exit(1)
-    if args[0] == "--sheet":
+    if args[0] == "--calibrate":
+        pdf_path, out_dir = args[1], args[2]
+        make_footer_sheet(pdf_path, out_dir, parse_range(args[3]))
+    elif args[0] == "--sheet":
         pdf_path, out_dir = args[1], args[2]
         make_sheet(pdf_path, out_dir, parse_range(args[3]))
     elif args[0] == "sheet":
