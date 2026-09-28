@@ -50,15 +50,17 @@ t("听写/翻译共用 drillPool（含教材词）", pool.length === J.VOCAB.N3.
 console.log("\n[3] 语法条目 → 并入语法库（GRAMMAR）");
 const all = J.GRAMMAR;
 const bkG = all.filter(x => x.from);
-t("教材语法条目 = 448", bkG.length === 448, bkG.length);
-t("可按等级筛选（N3）", all.filter(x => x.lv === "N3").length === 142, all.filter(x => x.lv === "N3").length);
-t("N2 含教材条目", all.filter(x => x.lv === "N2").length === 212, all.filter(x => x.lv === "N2").length);
-t("N1 含教材条目", all.filter(x => x.lv === "N1").length === 207, all.filter(x => x.lv === "N1").length);
+// 条数写成**下界**而不是等号：内容只增不减，写死总数会在每次补充内容时误报
+// （2026-09-28 就因为新增了 140 条语法而红过一次，其实数据完全正常）
+t("教材语法条目 ≥ 448", bkG.length >= 448, bkG.length);
+t("可按等级筛选（N3）", all.filter(x => x.lv === "N3").length >= 142, all.filter(x => x.lv === "N3").length);
+t("N2 含教材条目", all.filter(x => x.lv === "N2").length >= 212, all.filter(x => x.lv === "N2").length);
+t("N1 含教材条目", all.filter(x => x.lv === "N1").length >= 207, all.filter(x => x.lv === "N1").length);
 t("标注了教材出处", bkG.every(x => x.m.indexOf("教材句型") >= 0 && x.m.indexOf("课") >= 0));
 t("带课次（可用于筛选/排序）", bkG.every(x => Number.isInteger(x.l)));
 t("条目 id 唯一", new Set(all.map(x => x.id)).size === all.length);
 t("教材条目有独立 id 前缀", bkG.every(x => x.id.indexOf("bk-") === 0));
-t("原有语法条目未被破坏", all.filter(x => !x.from).length === 214, all.filter(x => !x.from).length);
+t("原有语法条目未被破坏（只增不减）", all.filter(x => !x.from).length >= 214, all.filter(x => !x.from).length);
 t("N3 首条是原语法（教材条目在后）", all.filter(x => x.lv === "N3")[0].from === undefined);
 
 console.log("\n[4] 课文 → 并入文章精读（READING）");

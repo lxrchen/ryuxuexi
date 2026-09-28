@@ -67,6 +67,29 @@ function click(attrs, id) {
 }
 function goto(hash) { globalThis.location.hash = hash; J.render(); }
 
+/* 客观作答「当前这张卡」的全部问题并进下一张。
+   v1.16.3 起卡片不再有自评按钮，改为作答后自动判分，所以测试也要按新流程走。 */
+function answerAndNext() {
+  for (let guard = 0; guard < 8; guard++) {
+    const qs = J.vs.ch;
+    if (!qs) break;
+    const q = Math.min(qs.idx, qs.specs.length - 1);
+    const v = J.vs.queue[J.vs.idx];
+    if (qs.ok[q] !== null) {                     // 这一问已答过
+      if (q < qs.specs.length - 1) { click({}, "cstep"); continue; }
+      break;
+    }
+    if (qs.opts[q]) {                            // 四选一：选正确项
+      const idx = qs.opts[q].findIndex((o) => o.id === v.id);
+      click({ "data-copt": String(idx) });
+    } else {                                     // 输入题：填正确答案
+      els["#cinput"].value = qs.specs[q].ask === "read" ? v.k : (v.w || v.k);
+      click({}, "csubmit");
+    }
+  }
+  click({}, "cnext");
+}
+
 console.log("\n[1] 页内开关都不应换掉当前单词");
 {
   S.cards = {}; S.today.new = 0; S.settings.cardMode = "word"; S.settings.cardKana = true;
@@ -104,17 +127,17 @@ console.log("\n[2] 同页重复渲染不换队列");
   t("索引仍是 0", J.ls.idx === 0, J.ls.idx);
 }
 
-console.log("\n[3] 评分后前进，且不会被后续操作拉回队首");
+console.log("\n[3] 作答后前进，且不会被后续操作拉回队首");
 {
   goto("#/learn");
   const st = J.ls;
   const n0 = st.queue.length;
-  click({ "data-g": "2" }, "");
-  click({ "data-g": "2" }, "");
-  t("连评两张 → idx 前进到 2", st.idx === 2, st.idx);
+  answerAndNext();
+  answerAndNext();
+  t("连答两张 → idx 前进到 2", st.idx === 2, st.idx);
   t("队列长度未变", st.queue.length === n0, st.queue.length);
   click({ "data-ckana": "1" });
-  t("评分后再点开关，idx 仍是 2（没被重置）", st.idx === 2, st.idx);
+  t("作答后再点开关，idx 仍是 2（没被重置）", st.idx === 2, st.idx);
 }
 
 console.log("\n[4] 切级别 / 来源 / 课次仍然会重建（这是应有行为）");

@@ -151,7 +151,11 @@ console.log("\n[6] 三种练习方向");
   let h = els["#vcard"].innerHTML;
   t("看词想义：正面显示词形", front(h).indexOf(withKanji.w) >= 0);
   t("看词想义：正面有 ruby 注音", front(h).indexOf("<ruby>") >= 0 && front(h).indexOf("<rt>") >= 0);
-  t("看词想义：正面不显示释义", front(h).indexOf(withKanji.z) < 0, front(h).replace(/<[^>]*>/g, "").slice(0, 60));
+  // v1.16.3 起复习改成「四选一作答」，正确释义必然出现在选项里 ——
+// 要守的是「不把释义当题干直接给出」，所以先把选项框整块摘掉再断言
+const stripOpts = (x) => x.replace(/<div class="coptbox">[\s\S]*?<\/div>/, "");
+t("看词想义：正面不把释义当题干（只出现在选项里）",
+  stripOpts(front(h)).indexOf(withKanji.z) < 0, stripOpts(front(h)).replace(/<[^>]*>/g, "").slice(0, 60));
 
   // 关掉注音
   S.settings.cardKana = false;
@@ -169,7 +173,8 @@ console.log("\n[6] 三种练习方向");
   h = els["#vcard"].innerHTML;
   t("听音：正面有播放按钮", front(h).indexOf("bigsay") >= 0);
   t("听音：正面不出现词形（不看字）", front(h).indexOf("cfront") < 0, (front(h).match(/class="cfront[^"]*"[^>]*>[^<]*/) || [])[0]);
-  t("听音：正面不出现释义", front(h).indexOf(withKanji.z) < 0, front(h).replace(/<[^>]*>/g, "").slice(0, 60));
+  t("听音：正面不把释义当题干（只出现在选项里）",
+  stripOpts(front(h)).indexOf(withKanji.z) < 0, stripOpts(front(h)).replace(/<[^>]*>/g, "").slice(0, 60));
   t("听音：背面有词 + 释义 + 注音", back(h).indexOf(withKanji.w) >= 0 && back(h).indexOf(withKanji.z) >= 0 && back(h).indexOf("<ruby>") >= 0);
   t("听音：背面可重听", h.indexOf("vsay2") >= 0);
 

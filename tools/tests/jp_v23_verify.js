@@ -78,7 +78,7 @@ console.log("\n[1] A. 反应时间 → 建议档位（0忘记 1困难 2良好 3�
   t("听音模式下不算用了提示", J.suggestGrade(2000, "listen", true) === 2, J.suggestGrade(2000, "listen", true));
 }
 
-console.log("\n[2] A. 卡片背面显示耗时与建议 + 推荐按钮高亮");
+console.log("\n[2] A. 客观判分：作答后自动定档，不再有自评按钮");
 {
   S.cards = {}; S.today = { date: "", new: 0, rev: 0 }; S.wrong = [];
   S.settings.cardMode = "word"; S.settings.cardKana = true;
@@ -87,25 +87,35 @@ console.log("\n[2] A. 卡片背面显示耗时与建议 + 推荐按钮高亮");
   st.lv = "N5"; st.src = ""; st.lesson = 0;
   J.buildQueue(true);
   const v = st.queue[0];
-  J.renderCard();                              // 正面（计时开始）
+  J.renderCard();                              // 正面（未作答）
   let h = els["#vcard"].innerHTML;
   t("正面不显示耗时行", h.indexOf("gtime") < 0);
+  t("正面没有自评按钮（已撤掉四档）", h.indexOf('data-g="') < 0);
+  t("正面给了选项（四选一）", (h.match(/data-copt=/g) || []).length >= 2,
+    (h.match(/data-copt=/g) || []).length);
 
-  sleepSync(30);
-  click({}, "vshow");                          // 翻面（结算反应时间）
-  t("翻面后 elapsed 被记录（>0）", (st.elapsed || 0) > 0, st.elapsed);
+  // 故意选错 → 判定「忘记」
+  const opts = J.vs.ch.opts[0];
+  const bad = opts.findIndex((o) => o.id !== v.id);
+  click({ "data-copt": String(bad) });
   h = els["#vcard"].innerHTML;
-  t("背面显示「你用了 N 秒」", h.indexOf("你用了") >= 0, (h.match(/你用了[\s\S]{0,50}?秒/) || [])[0]);
-  t("背面显示「建议评」", h.indexOf("建议评") >= 0);
-  t("有推荐档位高亮（.g.rec）", h.indexOf("g rec") >= 0 || /class="g \w+ rec"/.test(h), (h.match(/class="g[^"]*rec[^"]*"/) || [])[0]);
-  t("推荐档与耗时一致（30ms → 简单）", /class="g easy rec"/.test(h), (h.match(/class="g [a-z]+ rec"/) || [])[0]);
+  t("答错 → 判定「忘记」", /本题判定 <b>忘记<\/b>/.test(h),
+    (h.match(/本题判定[^<]*<b>[^<]*/) || [])[0]);
+  t("背面显示用时", h.indexOf("用时") >= 0);
+  t("背面没有自评按钮", h.indexOf('data-g="') < 0);
+  t("答错照常写入 SRS（不是只改界面）", !!S.cards[v.id]);
+  t("答错进错词本", S.wrong.indexOf(v.id) >= 0);
 
-  // 慢速场景 → 推荐忘记
-  st.show = false; st.elapsed = 15000;
-  J.setTimedKey(v.id);                         // 保持同一张卡
-  J.renderCard(); st.elapsed = 15000; st.show = true; J.renderCard();
-  h = els["#vcard"].innerHTML;
-  t("15 秒 → 推荐「忘记」", /class="g again rec"/.test(h), (h.match(/class="g [a-z]+ rec"/) || [])[0]);
+  // 答对 → 良好/简单（不是靠自评，是对错 + 用时算出来的）
+  S.cards = {}; S.wrong = []; S.today = { date: "", new: 0, rev: 0 };
+  J.buildQueue(true);
+  const v2 = J.ls.queue[J.ls.idx];
+  J.renderCard();
+  const opts2 = J.vs.ch.opts[0];
+  click({ "data-copt": String(opts2.findIndex((o) => o.id === v2.id)) });
+  const g2 = J.vs.ch.grade;
+  t("答对 → 良好或简单（不是靠自评）", g2 === 2 || g2 === 3, g2);
+  t("答对不进错词本", S.wrong.indexOf(v2.id) < 0);
 }
 
 console.log("\n[3] C. 练习方向按熟练度自动进阶（word→choice→listen→mean）");
