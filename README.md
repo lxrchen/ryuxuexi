@@ -346,9 +346,9 @@ Windows 11 安装神经语音包：设置 → 时间和语言 → 语言和区�
 ├── tools/render-pdf.py     扫描版 PDF 渲染（一页一图 1400px / --sheet 联系表定位）
 ├── tools/check-reading.js  精读数据自检（挖空·理解题·课次齐全）
 ├── tools/audit-ui.js       UI 自检（路由一致性 / 孤儿按钮 / 逐页与逐篇冒烟渲染）
-├── tools/run-tests.js      回归测试入口（tools/tests/jp_v10–v23）
-├── tools/run-tests.js      一键跑全量回归（`node tools/run-tests.js`）
-├── tools/tests/            回归测试脚本 jp_v10–v23（667 项断言）
+├── tools/check-vocab.js    词表/语法自检（字段·词性·同级重复·ます形·变形抽查）
+├── tools/run-tests.js      一键跑全量回归（tools/tests/jp_v10–v24）
+├── tools/tests/            回归测试脚本 jp_v10–v24（782 项断言）
 ├── dist/                   ★ 构建产物（Netlify 发布目录）
 ├── README.md               本文件
 ├── CHANGELOG.md            版本更新记录
