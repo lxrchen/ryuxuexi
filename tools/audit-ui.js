@@ -9,7 +9,12 @@ const ROOT = path.join(__dirname, "..");
 const app = fs.readFileSync(path.join(ROOT, "js/app.js"), "utf8");
 const idxHtml = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const buildJs = fs.readFileSync(path.join(ROOT, "build.js"), "utf8");
-const css = fs.readFileSync(path.join(ROOT, "css/style.css"), "utf8");
+// 样式检查要同时覆盖「基础样式」和「设计系统覆盖层」——
+// 只读 style.css 的话，改版新增的规则就完全不在自检视野里（等于没护栏）
+const css = ["css/style.css", "css/redesign.css"].map((f) => {
+  const p = path.join(ROOT, f);
+  return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+}).join("\n");
 
 let problems = 0, notes = 0;
 const bad = (s) => { problems++; console.log("  ✗ " + s); };
@@ -343,6 +348,39 @@ console.log("\n[6] 样式：媒体查询覆盖与潜在溢出");
     }
   });
   ok("长文本换行检查完成（合并选择器已纳入判定）");
+
+  /* ---- 居中 / 对称性：这几处都是"看着歪"的坑，只有量渲染才看得出来，用静态断言兜住 ---- */
+  // ① .coptbox：基础样式是 align-self:stretch + max-width:520px。
+  //    在 flex 里，**被拉伸但被 max-width 截断的元素会贴到交叉轴起点（左）**，不会居中（规范如此）。
+  //    实测卡片内宽 680 / 元素 520 → 左空 25、右空 135，四个选项整块左偏 110px。
+  {
+    const rules = cssNoComment.match(/\.coptbox\{[^}]*\}/g) || [];
+    // ⚠️ 不能只取「最后一条」：窄屏 @media 里还有一条 .coptbox 排在后面（只改 gap/margin），
+    //    按最后一条判断会把「已居中」误报成「未居中」。语义应是「存在一条声明了居中」。
+    const hasCenter = rules.some((r) => r.indexOf("align-self:center") >= 0);
+    if (!rules.length) bad("样式里找不到 .coptbox 定义");
+    else if (!hasCenter) {
+      bad(".coptbox 未显式 align-self:center —— 在 flex 里会被 max-width 截断后贴左，整块偏移");
+    } else ok("选项框 .coptbox 已显式居中（防 flex 截断贴左）");
+  }
+  // ② 题干框底部的操作行（「下一题 / 读一下」）：同一框内其它内容都居中，
+  //    它是 flex 行、默认左对齐 → 看着歪。居中时必须同时强制 wrap，
+  //    否则窄屏它变成横滑容器后，居中会把最左边的按钮裁掉。
+  {
+    const m = cssNoComment.match(/\.qbox\s*>\s*\.chips\{[^}]*\}/);
+    if (!m) bad(".qbox > .chips 缺居中规则（题干框内操作行会左对齐，与其它内容不齐）");
+    else if (m[0].indexOf("justify-content:center") < 0) bad(".qbox > .chips 未居中");
+    else if (m[0].indexOf("flex-wrap:wrap") < 0) warn(".qbox > .chips 居中但未强制 wrap，窄屏横滑可能裁掉最左按钮");
+    else ok("题干框操作行已居中且可换行");
+  }
+  // ③ 短选项组用等宽网格 —— 用 flex 会按文字长度自适应，
+  //    实测「开始/对不起/非常/关掉」宽度 126/94/82/82，一行参差。
+  {
+    const m = cssNoComment.match(/\.opts-eq\{[^}]*\}/);
+    if (!m) bad("样式里找不到 .opts-eq（短选项组会按文字宽度参差）");
+    else if (m[0].indexOf("grid") < 0) bad(".opts-eq 不是 grid，无法保证等宽");
+    else ok("短选项组 .opts-eq 用的是等宽网格");
+  }
 }
 
 /* ============ 7. 构建产物：本地单文件版不能在 file:// 下报错 ============ */

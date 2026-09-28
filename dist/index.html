@@ -497,6 +497,293 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
 .pronres .pronmeta{color:var(--tx3);font-size:12px}
 .pronhint{margin-top:8px;font-size:11.5px;line-height:1.75;color:var(--tx3)}
 
+/* ============================================================================
+   设计系统覆盖层（改版试验）
+   ----------------------------------------------------------------------------
+   为什么单独一个文件：用户要求「先实验、能回退」。
+   本文件在 style.css 之后加载，只做两件事：
+     ① 定义一套设计令牌（间距 / 字号 / 圆角 / 阴影 / 背景分层）
+     ② 用令牌重写「共用组件」的观感
+   **不改任何类名、不动任何功能逻辑** → 删掉本文件 = 完全回到原样。
+
+   改版依据（改前实测，不是凭感觉）：
+     · 间距有 22 种取值、字号 29 种、圆角 15 种 —— 相邻值只差 1~2px，没有节奏
+     · 学新词/复习页「主内容」要到 y=608/651 才出现（首屏 60% 是筛选）
+     · 43 个可点元素高度 <36px、最小字号 10px
+   ========================================================================== */
+
+:root{
+  /* ---- 间距阶梯（4 的倍数，8 档足够） ---- */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s7:32px; --s8:44px;
+  /* ---- 字号阶梯（下限提高：正文 ≥14，辅助 ≥12.5） ---- */
+  --f1:12px;      /* 极小：徽标数字 */
+  --f2:12.5px;    /* 辅助：元信息、提示 */
+  --f3:13.5px;    /* 次要正文 */
+  --f4:15px;      /* 正文 */
+  --f5:17px;      /* 小标题 */
+  --f6:20px;      /* 页面标题 */
+  --f7:26px;      /* 大数字 */
+  --f8:34px;      /* 卡片主词 */
+  /* ---- 圆角（4 档） ---- */
+  --rd1:8px; --rd2:12px; --rd3:16px; --rd4:20px;
+  /* ---- 阴影（3 档，越靠前越"低"） ---- */
+  --el1:0 1px 2px rgba(0,0,0,.28);
+  --el2:0 4px 18px rgba(0,0,0,.30);
+  --el3:0 16px 44px rgba(0,0,0,.42);
+  /* ---- 背景分层：底 → 表面 → 内嵌，拉开层次（原来是三档太接近） ---- */
+  --lv0:#0b0d13;   /* 页面底 */
+  --lv1:#151926;   /* 表面（卡片/列表） */
+  --lv2:#1c2233;   /* 内嵌（列表内部、输入框） */
+  --lv3:#252c40;   /* 悬浮/激活 */
+  --ln1:#28303f;   /* 细描边 */
+  --ln2:#3a4460;   /* 强调描边 */
+  /* ---- 文字（提高对比度） ---- */
+  --t1:#f2f5fa; --t2:#b3bbcf; --t3:#7b849b;
+  /* 让旧变量名跟着一起变（老规则若还引用它们，也一并升级） */
+  --bg:var(--lv0); --bg2:var(--lv1); --bg3:var(--lv2); --bg4:var(--lv3);
+  --tx:var(--t1); --tx2:var(--t2); --tx3:var(--t3);
+  --bd:var(--ln1); --bd2:var(--ln2);
+  --sh:var(--el2);
+}
+
+/* ===== 基础排版 ===== */
+body{font-size:var(--f4);line-height:1.75;letter-spacing:.01em}
+h2{font-size:var(--f6);margin:var(--s6) 0 var(--s4)}
+h3{font-size:var(--f5);margin:var(--s7) 0 var(--s3)}
+main{padding:var(--s6) var(--s5) 96px}
+
+/* ===== 顶栏：品牌 + 导航 ===== */
+.top{gap:var(--s5);padding:var(--s3) var(--s6);background:rgba(11,13,19,.86);
+  border-bottom:1px solid var(--ln1);box-shadow:var(--el1)}
+.brand{font-size:var(--f5);letter-spacing:.02em}
+.brand span{font-size:var(--f2);color:var(--t3);margin-left:var(--s3)}
+.nav{gap:2px}
+.nav a{padding:9px 14px;border-radius:var(--rd1);font-size:var(--f3);color:var(--t2);
+  transition:background .15s,color .15s}
+.nav a:hover{background:var(--lv2);color:var(--t1)}
+.nav a.on{background:linear-gradient(135deg,var(--ac),#6d63d8);color:#fff;
+  box-shadow:0 3px 12px rgba(139,131,240,.32)}
+/* 导航分组：14 项不加区分地排一行，认知负荷高。
+   用一条极细分隔线分成「学 / 练 / 查 / 我」四段（配合 build.js 里的分组标记）。 */
+.nav .nsep{width:1px;height:16px;background:var(--ln1);margin:0 var(--s2);flex:0 0 auto;align-self:center}
+
+/* ===== 控制：chip（筛选/开关） =====
+   原来 padding 6px 14px + 13px 字号 ≈ 31px 高，触摸偏小；
+   提到 9px 15px + 13.5px ≈ 38px，窄屏再抬高。 */
+.chip{background:var(--lv2);border:1px solid var(--ln1);color:var(--t2);
+  border-radius:999px;padding:9px 15px;font-size:var(--f3);line-height:1.2;
+  cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.chip:hover{background:var(--lv3);border-color:var(--ln2);color:var(--t1)}
+.chip.on{background:linear-gradient(135deg,var(--ac),#6d63d8);border-color:transparent;color:#fff;
+  box-shadow:0 2px 10px rgba(139,131,240,.28)}
+.chip.sm{padding:6px 12px;font-size:var(--f2)}
+.chip.warn{border-color:var(--warn);color:var(--warn);background:transparent}
+
+/* ===== 控制：按钮（建立主/次/弱三级） ===== */
+.btn{background:linear-gradient(135deg,var(--ac),#6d63d8);color:#fff;border:none;
+  border-radius:var(--rd1);padding:11px 20px;font-size:var(--f3);font-weight:500;
+  cursor:pointer;transition:transform .15s,box-shadow .15s;box-shadow:0 3px 14px rgba(139,131,240,.3)}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(139,131,240,.38)}
+.btn:active{transform:translateY(0)}
+.btn.sm{padding:8px 14px;font-size:var(--f2)}
+.btn.ghost{background:var(--lv2);color:var(--t2);border:1px solid var(--ln1);box-shadow:none}
+.btn.ghost:hover{background:var(--lv3);color:var(--t1)}
+
+/* ===== 控制：输入 ===== */
+.inp{background:var(--lv2);border:1px solid var(--ln1);border-radius:var(--rd1);
+  color:var(--t1);padding:11px 14px;font-size:var(--f4);outline:none;transition:border-color .15s,box-shadow .15s}
+.inp:focus{border-color:var(--ac);box-shadow:0 0 0 3px rgba(139,131,240,.16)}
+.inp.big{font-size:var(--f5);padding:14px 16px;margin:var(--s3) 0}
+
+/* ===== 页面头：标题 + 一句话说明（原来是长段落，占掉半屏） ===== */
+.lead{color:var(--t2);font-size:var(--f3);margin:0 0 var(--s4);line-height:1.75;max-width:78ch}
+.lead b{color:var(--t1);font-weight:600}
+.tip{color:var(--t2);font-size:var(--f3);margin:0 0 var(--s4);line-height:1.7;max-width:74ch}
+.tip b{color:var(--t1);font-weight:600}
+.tip2{font-size:var(--f2);color:var(--t3);line-height:1.85}
+.tip2 b{color:var(--t2)}
+
+/* ===== 筛选栏：把散落的 chips 收成一条「工具栏」 =====
+   原来 4 行 chips + 两段 tip2 直接把卡片推到首屏之外。 */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s3);
+  background:var(--lv1);border:1px solid var(--ln1);border-radius:var(--rd3);
+  padding:var(--s3) var(--s4);margin:0 0 var(--s3)}
+.toolbar .tlab{font-size:var(--f2);color:var(--t3);flex:0 0 auto;margin-right:calc(var(--s1) * -1)}
+.toolbar .chips{margin:0}
+/* 标签 + 它管的按钮必须是**一个不可分割的单元**：
+   否则窄一点的时候「级别」二字会留在上一行末尾，看起来像属于前面那组 */
+.tgroup{display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;min-width:0}
+/* ⚠️ 关键：窄屏时 .chips 会变成「单行横滑」的滚动容器，
+   但滚动容器的 min-width:auto 会把内部内容的宽度传上来，把 .tgroup / .toolbar 一起撑破页宽
+   （实测窄屏横向溢出 230px 就是这么来的）。必须显式允许收缩。 */
+.toolbar,.tgroup>.chips{min-width:0}
+.tgroup>.chips{flex:1 1 auto}
+/* 可折叠的「更多筛选」——用原生 details，不需要 JS，也不会丢键盘可达性 */
+.adv{border:1px solid var(--ln1);border-radius:var(--rd3);background:var(--lv1);
+  margin:0 0 var(--s3);overflow:hidden}
+.adv>summary{list-style:none;cursor:pointer;padding:var(--s3) var(--s4);font-size:var(--f3);color:var(--t2);
+  display:flex;align-items:center;gap:var(--s2);user-select:none}
+.adv>summary::-webkit-details-marker{display:none}
+.adv>summary::after{content:"▾";margin-left:auto;color:var(--t3);transition:transform .2s}
+.adv[open]>summary::after{transform:rotate(180deg)}
+.adv>summary:hover{color:var(--t1);background:var(--lv2)}
+.adv[open]>summary{border-bottom:1px solid var(--ln1)}
+.adv .advbody{padding:var(--s3) var(--s4) var(--s4)}
+.adv .advbody .chips{margin:var(--s2) 0}
+
+/* ===== 统计条：一行放完，替代原来一大块 rowbox ===== */
+.statbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2) var(--s5);
+  background:var(--lv1);border:1px solid var(--ln1);border-radius:var(--rd2);
+  padding:var(--s3) var(--s4);margin:0 0 var(--s4);font-size:var(--f3);color:var(--t2)}
+.statbar b{color:var(--t1);font-weight:600}
+.statbar .grow{margin-left:auto}
+
+/* 通用信息行（保留旧类名，观感统一） */
+.rowbox{display:flex;gap:var(--s4);flex-wrap:wrap;align-items:center;color:var(--t2);
+  font-size:var(--f3);background:var(--lv1);border:1px solid var(--ln1);
+  border-radius:var(--rd2);padding:var(--s3) var(--s4);margin:var(--s3) 0}
+.rowbox b{color:var(--t1)}
+
+/* ===== 表面：卡片 / 盒子 ===== */
+.qbox,.mcard,.dbox,.ringwrap{background:var(--lv1);border:1px solid var(--ln1);
+  box-shadow:var(--el2)}
+.qbox{border-radius:var(--rd4);padding:var(--s7) var(--s6)}
+.mcard,.dbox{border-radius:var(--rd3);padding:var(--s5)}
+.mnum,.dnum{font-size:var(--f7);letter-spacing:-.01em}
+.mgrid,.dgrid{gap:var(--s4);margin-bottom:var(--s5)}
+.ringwrap{border-radius:var(--rd3);padding:var(--s5) var(--s6);margin-bottom:var(--s5)}
+
+/* ===== 列表：语法条目 / 精读 / 已学词（原来三套样式各写各的） ===== */
+.gitem{background:var(--lv1);border:1px solid var(--ln1);border-radius:var(--rd2);
+  margin-bottom:var(--s2);transition:border-color .15s,background .15s}
+.gitem:hover{border-color:var(--ln2);background:var(--lv2)}
+.ghead{padding:var(--s4) var(--s5);gap:var(--s4)}
+.gname{font-size:var(--f4)}
+.gmean{font-size:var(--f3);color:var(--t2)}
+
+.rline,.svrow{background:var(--lv1);border:1px solid var(--ln1);border-radius:var(--rd2);
+  margin-bottom:var(--s2);transition:border-color .15s,background .15s}
+.rline{padding:var(--s4) var(--s5)}
+.svrow{padding:var(--s4) var(--s5)}
+.rline:hover,.svrow:hover{border-color:var(--ln2);background:var(--lv2)}
+
+/* ===== 小字统一抬到 12.5px =====
+   原来有一批 11~11.5px 的「次要信息」（经验值、进度标签、标签行、口语提示…），
+   低于手机上舒适的阅读下限。这里统一收口，不让它们散落在各处。 */
+.pronhint,.xptxt,.lvnum,.rgtags,.tbcount,.svmeta,.svtag,.ctxz,.gtr,.rt,.qask,
+.atip,.alab,.dlab,.gtime,.gtag,.badge,.badge-live,.chip.sm,.tbgram,.tbtopic,.forecast{
+  font-size:var(--f2);
+}
+.lvnum,.gtime,.tbcount,.rgtags{line-height:1.7}
+
+/* ===== 徽标 / 真人音角标 ===== */
+.badge,.badge-live{border-radius:999px;font-size:var(--f1)}
+.badge{background:var(--lv1);border:1px solid var(--ln1);padding:var(--s2) var(--s4);color:var(--t3)}
+.badge-live{background:rgba(79,209,165,.14);color:var(--ok);border:1px solid rgba(79,209,165,.34);
+  padding:2px 9px;font-weight:500}
+
+/* ===== 卡片（主角）：给更多呼吸与更明确的边界 ===== */
+.card{max-width:680px;margin:var(--s5) auto}
+.cface{background:var(--lv1);border:1px solid var(--ln1);border-radius:var(--rd4);
+  padding:var(--s7) var(--s6);box-shadow:var(--el3)}
+/* ⚠️ 选项网格必须**显式**居中，否则会整体左偏。
+   基础样式里 .coptbox 是 `align-self:stretch` + `max-width:520px` 的组合：
+   在 flex 容器里，**被拉伸但被 max-width 截断的元素会贴到交叉轴起点（左边）**，
+   不会自动居中（规范如此，不是浏览器 bug）。
+   实测：卡片内宽 680、选项框 520 → 左空 25px、右空 135px，整块左移 110px，
+   看起来就是「四个选项不居中、不对称」。
+   顺带把宽度改成占满卡片内容区：原来那个 520 是死值，卡片变宽后偏移更明显；
+   占满后 2×2 与卡片内边缘对齐，左右留白完全相等。 */
+.coptbox{align-self:center;width:100%;max-width:none;gap:var(--s3)}
+/* 短选项组（翻译页等）：改成**等宽网格**。
+   原来是 flex + 按文字自适应宽度 → 「开始 / 对不起 / 非常 / 关掉」实际宽度
+   126/94/82/82，一行参差不齐，同样是「不对称」的观感。
+   minmax(120px,1fr) 由容器宽度自动决定列数（宽屏 4 列、窄屏 2 列），
+   不需要写媒体查询；每个格子等宽、文字居中，整组再整体居中。
+   注意：只给**短选项**用。精读理解题的选项是整句，两列会被挤成竖条，仍用原来的 .opts。 */
+.opts-eq{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));
+  gap:var(--s3);width:100%;max-width:560px;margin:var(--s4) auto}
+.opts-eq .opt{width:100%;min-width:0;padding:12px 14px}
+/* 题干框（.qbox）里的一切都居中，但底部那行操作按钮（「下一题 / 读一下」）是
+   flex 行、默认左对齐 → 同一块区域里出现两种对齐，看着歪。
+   强制 wrap 是为了防止窄屏变成横滑容器后，居中会把最左边的按钮裁掉（flex + overflow 的老问题）。 */
+.qbox > .chips{justify-content:center;flex-wrap:wrap}
+.cmeta{font-size:var(--f2);color:var(--t3);margin-bottom:var(--s5);line-height:1.9}
+.cmeta b{color:var(--t2)}
+.cmean{color:var(--ok);font-weight:500;margin:var(--s5) 0}
+.hint{font-size:var(--f2);color:var(--t3);margin-top:var(--s4);line-height:1.85}
+.hint kbd{background:var(--lv3);border:1px solid var(--ln2);border-radius:6px;padding:2px 6px;
+  font-family:ui-monospace,Consolas,monospace;font-size:var(--f1)}
+.chint{font-size:var(--f3);color:var(--t2);margin-top:var(--s2)}
+.grades{gap:var(--s3);margin-top:var(--s5)}
+.g{border-radius:var(--rd1);padding:12px 22px;font-size:var(--f3)}
+
+/* ===== 小屏 ===== */
+@media(max-width:960px){
+  main{padding:var(--s5) var(--s4) 88px}
+  .top{padding:var(--s2) var(--s4);gap:var(--s3)}
+  .nav{width:100%;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding-bottom:2px;
+    scrollbar-width:none;-ms-overflow-style:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{white-space:nowrap;flex:0 0 auto;padding:9px 13px}
+  .nav .nsep{display:none}
+}
+
+@media(max-width:640px){
+  :root{--f4:15px;--f6:19px;--f7:24px;--f8:30px}
+  main{padding:var(--s4) var(--s3) 80px}
+  h2{font-size:var(--f6);margin:var(--s5) 0 var(--s3)}
+  h3{font-size:var(--f4);margin:var(--s5) 0 var(--s2)}
+  /* 触摸目标：窄屏 ≤44px 才算合格 */
+  .chip{padding:10px 15px;font-size:var(--f3);min-height:40px;display:inline-flex;align-items:center}
+  .chip.sm{padding:8px 12px;min-height:34px}
+  .btn{padding:12px 18px;min-height:44px}
+  .btn.sm{padding:10px 14px;min-height:38px}
+  .nav a{padding:10px 13px;min-height:40px;display:inline-flex;align-items:center}
+  /* 卡片正反面 / 听选选项 / 进度环 / 首页小卡（自检要求这几类在窄屏有单独调整） */
+  .cface{padding:var(--s5) var(--s4);border-radius:var(--rd3)}
+  .cwrap{min-height:220px}
+  .cfront{font-size:var(--f8)}
+  .cmean{font-size:var(--f6);margin:var(--s4) 0}
+  .qtitle{font-size:var(--f5)}
+  .bigsay{width:88px;height:88px;font-size:32px}
+  .ring{width:80px;height:80px}
+  .g{padding:11px 15px;font-size:var(--f2);min-height:44px}
+  .svrow,.svword,.svsay{min-height:0}
+  .rsay{width:28px;height:28px;font-size:var(--f1)}
+  .rsay{display:inline-flex;align-items:center;justify-content:center}
+  .rline{padding:var(--s3) var(--s4);gap:var(--s3)}
+  .rblank{font-size:var(--f5)}
+  .gtime{font-size:var(--f2)}
+  .ctxbox{padding:var(--s3) var(--s4)}
+  .coptbox{gap:var(--s2);margin:var(--s4) 0 var(--s1)}
+  .copt{padding:12px 8px;font-size:var(--f3);min-height:48px}
+  .cres{gap:var(--s2);font-size:var(--f2);padding:var(--s3) var(--s4)}
+  .pronbox{padding:var(--s3) var(--s4)}
+  .qbox{padding:var(--s6) var(--s4)}
+  /* 筛选区在窄屏压到最简 */
+  .toolbar{padding:var(--s2) var(--s3);gap:var(--s2)}
+  /* 窄屏省掉分组标签：chip 本身就能说明是哪一组（自动进阶… / N5…），
+     留着标签反而会把「标签 + 按钮」挤成两行，白吃 40px */
+  .toolbar .tlab{display:none}
+  .toolbar .tgroup{width:100%}
+  /* 统计条也收成一行横滑，别折成三行（实测 146px → ~52px） */
+  .statbar{padding:var(--s2) var(--s3);gap:var(--s2) var(--s4);
+    flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;
+    white-space:nowrap}
+  .statbar::-webkit-scrollbar{display:none}
+  .statbar>*{flex:0 0 auto}
+  .statbar .grow{margin-left:0}
+  .adv>summary{padding:var(--s3)}
+  .lead{margin-bottom:var(--s3)}
+  .tip,.tip2{font-size:var(--f3)}
+}
+
+/* 尊重系统「减少动态效果」 */
+@media(prefers-reduced-motion:reduce){
+  *{transition-duration:.01ms !important;animation-duration:.01ms !important}
+}
+
 </style>
 </head>
 <body>
@@ -505,24 +792,27 @@ code{background:var(--bg4);border-radius:5px;padding:1px 6px;font-size:12px}
   <nav class="nav">
     <a href="#/home">首页</a>
     <a href="#/kana">五十音</a>
+    <i class="nsep"></i>
     <a href="#/learn">学新词</a>
     <a href="#/review">复习</a>
-    <a href="#/grammar">语法库</a>
     <a href="#/drill">变形训练</a>
     <a href="#/dict">听写</a>
     <a href="#/trans">翻译</a>
+    <i class="nsep"></i>
+    <a href="#/grammar">语法库</a>
     <a href="#/read">文章精读</a>
     <a href="#/textbook">教材大纲</a>
-    <a href="#/dash">仪表盘</a>
+    <i class="nsep"></i>
     <a href="#/studied">已学词</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>
+    <a href="#/dash">仪表盘</a>
   </nav>
 </header>
 <main id="app"></main>
 <footer class="foot">
   数据保存在你自己的浏览器（localStorage）· 建议每天 30-60 分钟 · 先打满 N5/N4，再推 N3 → N2 → N1
-  <br>版本：2026-09-28 11:36
+  <br>版本：2026-09-28 12:41
 </footer>
 <script>
 /* ==== js/data/kana.js ==== */
@@ -8867,62 +9157,35 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     const mc = modeCounts(st);
     const rm = st.rmode || "due";
     const cnt = isReview ? (rm === "due" ? mc.due : rm === "wrong" ? mc.wrong : mc.all) : mc["new"];
-    h += '<p class="tip">' + (isReview
-      ? (rm === "due"
-        ? '这里<b>只会出现你已经学过、且到了复习时间的词</b>。没背过的新词不会混进来 —— 想学新词请去「学新词」页。'
-        : rm === "wrong"
-          ? '这里<b>只会出现你答错过的词</b>（错词本），可以随时反复练，不用等到期。'
-          : '这里出现你<b>学过的全部词</b>，不看到期时间 —— 想主动过一遍就用这个。按「最久没复习」的顺序排。')
-      : '这里<b>只会出现你从没背过的词</b>。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
-    h += '<div class="rowbox"><span>可练：<b>' + cnt + '</b> 个</span>'
-      + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
-    // 复习选词方式：默认只出到期的；也可主动过全部已学 / 只练错词（不受到期时间限制）
+    // —— 页面头：一句话说清这页出什么词 ——
+    // 原来是一大段 `<p class="tip">`，配上下面 4 行筛选，把卡片推到首屏之外（实测 y=608）
+    h += '<p class="lead">' + (isReview
+      ? (rm === "due" ? '只出<b>学过、且到了复习时间</b>的词 —— 新词不会混进来，想学新词去「学新词」页。'
+        : rm === "wrong" ? '只出你<b>答错过</b>的词（错词本），随时可练，不用等到期。'
+          : '出<b>学过的全部词</b>，不看到期时间，按「最久没复习」排 —— 刚学完的也在最前面。')
+      : '只出<b>从没背过</b>的词。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
+
+    // —— 工具栏：最常用的筛选常显（选词 / 练习 / 级别）——
+    h += '<div class="toolbar">';
     if (isReview) {
-      h += '<div class="chips">选词：';
+      h += '<div class="tgroup"><span class="tlab">选词</span><div class="chips">';
       RMODES.forEach(function (m) {
         const n = m[0] === "due" ? mc.due : m[0] === "wrong" ? mc.wrong : mc.all;
         const ttl = m[0] === "all" ? ' title="不看到期时间，想复习就复习"' : m[0] === "wrong" ? ' title="只练你答错过的词"' : ' title="按 SRS 到期的词（默认）"';
         h += '<button class="chip' + (rm === m[0] ? " on" : "") + '" data-rvmode="' + m[0] + '"' + ttl + '>'
           + m[1] + '（' + n + '）</button>';
       });
-      h += '</div>';
-      if (rm !== "due") {
-        h += '<div class="tip2">'
-          + (rm === "wrong"
-            ? '🎯 <b>只练错词</b>：这些都是你评过「忘记 / 困难」的词，答对会移出错词本。配合下方<b>级别 / 来源 / 课次</b>可以精准补弱。'
-            : '🗂️ <b>全部已学</b>：不看到期时间，随时想复习就复习。顺序按「最久没复习」排 —— 刚学完的也在最前面。评分照常更新下次复习时间。')
-          + '</div>';
-      }
+      h += '</div></div>';
     }
-    // 练习方向 + 注音开关：随手可切，切换后立即重建本轮
     const cMode = S.settings.cardMode || "auto";
     const kanaOn = S.settings.cardKana !== false;
-    h += '<div class="chips">练习：';
+    h += '<div class="tgroup"><span class="tlab">练习</span><div class="chips">';
     CARD_MODES.forEach(function (m) {
       h += '<button class="chip' + (cMode === m[0] ? " on" : "") + '" data-cmode="' + m[0] + '"'
         + (m[0] === "auto" ? ' title="按熟练度自动切换练法"' : '') + '>' + m[1] + '</button>';
     });
-    h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
-    if (cMode === "listen" || cMode === "choice" || cMode === "auto") {
-      const ap = S.settings.autoPlay !== false;
-      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音 / 听选模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
-    }
-    h += '</div>';
-    h += '<div class="tip2">'
-      + '🧭 <b>一律「出题作答 + 自动判分」</b>，不用再点「忘记/困难/良好/简单」自评 —— '
-      + '自评会受「看了答案才觉得本来就会」影响，按对错判更准。'
-      + '<br>作答方式随熟练度切：<b>复习 4 次以内 → 四选一</b>（门槛低）；<b>之后 → 动手输入</b>'
-      + '（四选一是再认、比回忆容易，一直用会把间隔撑得太长，反而不牢）。'
-      + (cMode === "auto"
-        ? '<br>🪜 <b>自动进阶</b>：新词先「看词想义」立形义联系 → 3 次「听音选答」练听解 → 4–5 次「听音辨义」→ 6 次起「看义想词」练产出。'
-          + '每张卡信息栏会标出当前练法与作答方式，想固定用某一种就点上面切换。'
-        : cMode === "choice" ? '<br>🎯 <b>听音选答</b>：放发音 → 先选出是哪个词 → 再选出它的中文意思。熟练后改为听音写词。'
-          : cMode === "listen" ? '<br>🎧 <b>听音辨义</b>：只放发音 → 从 4 个中文释义里选出它的意思。熟练后改为听音写词。按 <kbd>S</kbd> 或点 🔊 重听。'
-            : cMode === "mean" ? '<br>✍️ <b>看义想词</b>：给中文 → 从 4 个词里选出对应的日文。熟练后改为手写这个词 —— 从「认得」进阶到「用得出」。'
-              : '<br>👁️ <b>看词想义</b>：给词形 → 从 4 个中文释义里选出它的意思。熟练后改为手写读音。')
-      + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
-      + '</div>';
-    h += '<div class="chips">级别：';
+    h += '</div></div>';
+    h += '<div class="tgroup"><span class="tlab">级别</span><div class="chips">';
     LEVELS.forEach(function (L) {
       // 复习页显示「已学 N」—— 自主复习时挑级别要看已经学了多少，而不是总量
       if (isReview) {
@@ -8935,7 +9198,10 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
       const bk = VOCAB[L].filter(function (v) { return v.book; }).length;
       h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + (bk ? '·教材' + bk : '') + '）</button>';
     });
-    h += '</div>';
+    h += '</div></div></div>';
+
+    // —— 折叠区：不常用筛选 + 说明文字（默认收起，把首屏让给卡片）——
+    h += '<details class="adv"><summary>更多筛选与用法说明</summary><div class="advbody">';
     // 来源筛选：内置 / 各册教材（教材内容不撒进内置池随机抽，可整册整课练）
     const hasBooks = booksIn(st.lv).length > 0;
     if (hasBooks) {
@@ -8949,7 +9215,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     }
     // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
     if (!hasBooks || st.src !== "") {
-      // chips-scroll：课次可能有 20+ 个，窄屏收成一行横向滚动，别把卡片挤到屏幕外
+      // chips-scroll：课次可能有 20+ 个，收成一行横向滚动，别把卡片挤到屏幕外
       h += '<div class="chips chips-scroll">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
       const lessons = [];
       VOCAB[st.lv].forEach(function (v) {
@@ -8965,16 +9231,53 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     } else {
       h += '<div class="tip2">本级别含<b>教材生词</b>：先在上方「来源」选一册教材，即可按课次逐课练习。</div>';
     }
+    // 注音 / 自动播放（低频开关）
+    h += '<div class="chips">';
+    h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
+    if (cMode === "listen" || cMode === "choice" || cMode === "auto") {
+      const ap = S.settings.autoPlay !== false;
+      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音 / 听选模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
+    }
+    h += '</div>';
+    if (isReview && rm !== "due") {
+      h += '<div class="tip2">'
+        + (rm === "wrong"
+          ? '🎯 <b>只练错词</b>：这些都是你答错过的词，答对会移出错词本。配合上方<b>级别 / 来源 / 课次</b>可以精准补弱。'
+          : '🗂️ <b>全部已学</b>：不看到期时间，随时想复习就复习。顺序按「最久没复习」排。评分照常更新下次复习时间。')
+        + '</div>';
+    }
+    h += '<div class="tip2">'
+      + '🧭 <b>一律「出题作答 + 自动判分」</b>，不用点四档自评 —— 自评会受「看了答案才觉得本来就会」影响。'
+      + '作答方式随熟练度切：<b>复习 4 次以内 → 四选一</b>（门槛低），<b>之后 → 动手输入</b>'
+      + '（四选一是再认、比回忆容易，一直用会把间隔撑得太长）。'
+      + (cMode === "auto"
+        ? '<br>🪜 <b>自动进阶</b>：新词先「看词想义」立形义联系 → 3 次「听音选答」练听解 → 4–5 次「听音辨义」→ 6 次起「看义想词」练产出。'
+          + '卡片信息栏会标出当前练法与作答方式，想固定用某一种就在上面切换。'
+        : cMode === "choice" ? '<br>🎯 <b>听音选答</b>：放发音 → 先选出是哪个词 → 再选出它的中文意思。熟练后改为听音写词。'
+          : cMode === "listen" ? '<br>🎧 <b>听音辨义</b>：只放发音 → 从 4 个中文释义里选出它的意思。熟练后改为听音写词。按 <kbd>S</kbd> 或点 🔊 重听。'
+            : cMode === "mean" ? '<br>✍️ <b>看义想词</b>：给中文 → 从 4 个词里选出对应的日文。熟练后改为手写这个词。'
+              : '<br>👁️ <b>看词想义</b>：给词形 → 从 4 个中文释义里选出它的意思。熟练后改为手写读音。')
+      + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
+      + '</div>';
+    h += '</div></details>';
+
+    // —— 统计条：一行放完（原来两个 rowbox 分两处）——
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
-    h += '<div class="rowbox">'
+    h += '<div class="statbar">'
+      + '<span>可练：<b>' + cnt + '</b></span>'
       + (isReview
         ? '<span>今日已复习：<b>' + S.today.rev + '</b></span>'
           + (rm === "due" ? '<span>到期待复习：<b>' + mc.due + '</b></span>'
             : rm === "wrong" ? '<span>错词：<b>' + mc.wrong + '</b></span>'
               : '<span>已学可练：<b>' + mc.all + '</b></span>')
-        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日额度剩余：<b>' + quotaLeft + '</b></span><span>未学词：<b>' + mc["new"] + '</b></span>')
+        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span>'
+          + '<span>额度剩余：<b>' + quotaLeft + '</b></span>'
+          + '<span>未学词：<b>' + mc["new"] + '</b></span>')
       + (mc.learn ? '<span title="还没走完学习步的词（答错或刚学）">巩固中：<b>' + mc.learn + '</b></span>' : '')
-      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重抽本轮</button></div>';
+      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span>'
+      + '<button class="btn sm ghost" id="vbuild">重抽本轮</button>'
+      + '<button class="btn sm grow" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button>'
+      + '</div>';
     h += queueNote(st, mc, quotaLeft);
     h += '<div id="vcard" class="card"></div>';
     return h;
@@ -10147,7 +10450,7 @@ globalThis.AUDIO_MAP = {"中国人|ちゅうごくじん":1,"留学生|りゅう
     if (trn.dir === "j2c") {
       h += '<div class="qtitle jp">' + esc(v.w || v.k) + '</div>';
       h += '<div class="qask"><span class="rt">' + esc(v.k) + '</span>　' + esc(v.p || "") + '</div>';
-      h += '<div class="opts">';
+      h += '<div class="opts opts-eq">';
       trn.opts.forEach(function (o, i) {
         let cls = "opt";
         if (trn.picked >= 0) {

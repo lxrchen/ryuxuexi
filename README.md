@@ -328,7 +328,8 @@ Windows 11 安装神经语音包：设置 → 时间和语言 → 语言和区�
 ├── sw.js                   Service Worker（离线 + 音频缓存）
 ├── manifest.webmanifest    PWA 清单
 ├── icon.svg                App 图标
-├── css/style.css           样式
+├── css/style.css           样式（基础）
+├── css/redesign.css        设计令牌与覆盖层（v1.17.2 起）。**删掉这个文件即可完全回退到旧外观**
 ├── js/app.js               ★ 核心引擎（SRS / 变形 / 路由 / 视图 / 语音）
 ├── js/data/                数据层
 │   ├── kana.js             假名 103（含字源、例词、9 组易混对）
@@ -461,6 +462,10 @@ node build.js
   Safari / Firefox 会给出友好提示而不是报错；且必须在 **https 或 localhost** 下才能拿到麦克风
 - **自适应**：桌面 / 平板 / 手机三档都验过（1440 / 1024 / 390），
   14 个页面均无横向溢出。窄屏下导航与长筛选行收成单行横向滚动
+- **设计令牌**（v1.17.2 起）：间距 / 字号 / 圆角 / 背景分层统一在 `css/redesign.css` 的 `:root` 里。
+  改版前样式表里间距有 **22 种**取值、字号 **29 种**（相邻只差 1–2px），是「哪里都差一点」的根因。
+  新增/调整样式请优先用令牌；`tools/audit-ui.js` 会检查两处容易写错的地方：
+  `.coptbox` 等居中元素是否真的居中、`.qbox > .chips` 操作行是否居中
 - 已为暗色主题设置 `color-scheme:dark`，Edge / Chrome 在 Windows 下的滚动条与原生控件
   会跟着变暗（否则会出现浅色滚动条）
 - 进度存 localStorage：**换浏览器或清缓存会丢失**，换设备请用仪表盘的「导出 / 导入」

@@ -209,7 +209,10 @@ console.log("\n[8] 其他功能未被破坏");
 {
   t("数据仍在", J.VOCAB.N5.length > 0 && J.GRAMMAR.length > 0 && J.READING.length > 0);
   t("听写判分可用", J.matchWord({ k: "ねこ", w: "猫" }, "猫") === true);
-  t("学习页与复习页视图可渲染", J.viewLearn().indexOf("练习：") >= 0 && J.viewReview().indexOf("练习：") >= 0);
+  // 工具栏改版后分组标签不再带全角冒号（「练习：」→ 独立的 .tlab 标签），断言跟着改成判标签本身
+t("学习页与复习页视图可渲染",
+    J.viewLearn().indexOf(">练习<") >= 0 && J.viewReview().indexOf(">练习<") >= 0,
+    J.viewLearn().slice(0, 40));
   t("学习步进仍在（LEARN_STEPS 两步）", J.LEARN_STEPS.length === 2);
 }
 

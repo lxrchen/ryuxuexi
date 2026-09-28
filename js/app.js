@@ -1037,62 +1037,35 @@
     const mc = modeCounts(st);
     const rm = st.rmode || "due";
     const cnt = isReview ? (rm === "due" ? mc.due : rm === "wrong" ? mc.wrong : mc.all) : mc["new"];
-    h += '<p class="tip">' + (isReview
-      ? (rm === "due"
-        ? '这里<b>只会出现你已经学过、且到了复习时间的词</b>。没背过的新词不会混进来 —— 想学新词请去「学新词」页。'
-        : rm === "wrong"
-          ? '这里<b>只会出现你答错过的词</b>（错词本），可以随时反复练，不用等到期。'
-          : '这里出现你<b>学过的全部词</b>，不看到期时间 —— 想主动过一遍就用这个。按「最久没复习」的顺序排。')
-      : '这里<b>只会出现你从没背过的词</b>。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
-    h += '<div class="rowbox"><span>可练：<b>' + cnt + '</b> 个</span>'
-      + '<button class="btn sm" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button></div>';
-    // 复习选词方式：默认只出到期的；也可主动过全部已学 / 只练错词（不受到期时间限制）
+    // —— 页面头：一句话说清这页出什么词 ——
+    // 原来是一大段 `<p class="tip">`，配上下面 4 行筛选，把卡片推到首屏之外（实测 y=608）
+    h += '<p class="lead">' + (isReview
+      ? (rm === "due" ? '只出<b>学过、且到了复习时间</b>的词 —— 新词不会混进来，想学新词去「学新词」页。'
+        : rm === "wrong" ? '只出你<b>答错过</b>的词（错词本），随时可练，不用等到期。'
+          : '出<b>学过的全部词</b>，不看到期时间，按「最久没复习」排 —— 刚学完的也在最前面。')
+      : '只出<b>从没背过</b>的词。已经学过的不在这里，巩固请去「复习」页。') + '</p>';
+
+    // —— 工具栏：最常用的筛选常显（选词 / 练习 / 级别）——
+    h += '<div class="toolbar">';
     if (isReview) {
-      h += '<div class="chips">选词：';
+      h += '<div class="tgroup"><span class="tlab">选词</span><div class="chips">';
       RMODES.forEach(function (m) {
         const n = m[0] === "due" ? mc.due : m[0] === "wrong" ? mc.wrong : mc.all;
         const ttl = m[0] === "all" ? ' title="不看到期时间，想复习就复习"' : m[0] === "wrong" ? ' title="只练你答错过的词"' : ' title="按 SRS 到期的词（默认）"';
         h += '<button class="chip' + (rm === m[0] ? " on" : "") + '" data-rvmode="' + m[0] + '"' + ttl + '>'
           + m[1] + '（' + n + '）</button>';
       });
-      h += '</div>';
-      if (rm !== "due") {
-        h += '<div class="tip2">'
-          + (rm === "wrong"
-            ? '🎯 <b>只练错词</b>：这些都是你评过「忘记 / 困难」的词，答对会移出错词本。配合下方<b>级别 / 来源 / 课次</b>可以精准补弱。'
-            : '🗂️ <b>全部已学</b>：不看到期时间，随时想复习就复习。顺序按「最久没复习」排 —— 刚学完的也在最前面。评分照常更新下次复习时间。')
-          + '</div>';
-      }
+      h += '</div></div>';
     }
-    // 练习方向 + 注音开关：随手可切，切换后立即重建本轮
     const cMode = S.settings.cardMode || "auto";
     const kanaOn = S.settings.cardKana !== false;
-    h += '<div class="chips">练习：';
+    h += '<div class="tgroup"><span class="tlab">练习</span><div class="chips">';
     CARD_MODES.forEach(function (m) {
       h += '<button class="chip' + (cMode === m[0] ? " on" : "") + '" data-cmode="' + m[0] + '"'
         + (m[0] === "auto" ? ' title="按熟练度自动切换练法"' : '') + '>' + m[1] + '</button>';
     });
-    h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
-    if (cMode === "listen" || cMode === "choice" || cMode === "auto") {
-      const ap = S.settings.autoPlay !== false;
-      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音 / 听选模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
-    }
-    h += '</div>';
-    h += '<div class="tip2">'
-      + '🧭 <b>一律「出题作答 + 自动判分」</b>，不用再点「忘记/困难/良好/简单」自评 —— '
-      + '自评会受「看了答案才觉得本来就会」影响，按对错判更准。'
-      + '<br>作答方式随熟练度切：<b>复习 4 次以内 → 四选一</b>（门槛低）；<b>之后 → 动手输入</b>'
-      + '（四选一是再认、比回忆容易，一直用会把间隔撑得太长，反而不牢）。'
-      + (cMode === "auto"
-        ? '<br>🪜 <b>自动进阶</b>：新词先「看词想义」立形义联系 → 3 次「听音选答」练听解 → 4–5 次「听音辨义」→ 6 次起「看义想词」练产出。'
-          + '每张卡信息栏会标出当前练法与作答方式，想固定用某一种就点上面切换。'
-        : cMode === "choice" ? '<br>🎯 <b>听音选答</b>：放发音 → 先选出是哪个词 → 再选出它的中文意思。熟练后改为听音写词。'
-          : cMode === "listen" ? '<br>🎧 <b>听音辨义</b>：只放发音 → 从 4 个中文释义里选出它的意思。熟练后改为听音写词。按 <kbd>S</kbd> 或点 🔊 重听。'
-            : cMode === "mean" ? '<br>✍️ <b>看义想词</b>：给中文 → 从 4 个词里选出对应的日文。熟练后改为手写这个词 —— 从「认得」进阶到「用得出」。'
-              : '<br>👁️ <b>看词想义</b>：给词形 → 从 4 个中文释义里选出它的意思。熟练后改为手写读音。')
-      + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
-      + '</div>';
-    h += '<div class="chips">级别：';
+    h += '</div></div>';
+    h += '<div class="tgroup"><span class="tlab">级别</span><div class="chips">';
     LEVELS.forEach(function (L) {
       // 复习页显示「已学 N」—— 自主复习时挑级别要看已经学了多少，而不是总量
       if (isReview) {
@@ -1105,7 +1078,10 @@
       const bk = VOCAB[L].filter(function (v) { return v.book; }).length;
       h += '<button class="chip' + (st.lv === L ? " on" : "") + '" data-vlv="' + L + '">' + L + '（' + VOCAB[L].length + (bk ? '·教材' + bk : '') + '）</button>';
     });
-    h += '</div>';
+    h += '</div></div></div>';
+
+    // —— 折叠区：不常用筛选 + 说明文字（默认收起，把首屏让给卡片）——
+    h += '<details class="adv"><summary>更多筛选与用法说明</summary><div class="advbody">';
     // 来源筛选：内置 / 各册教材（教材内容不撒进内置池随机抽，可整册整课练）
     const hasBooks = booksIn(st.lv).length > 0;
     if (hasBooks) {
@@ -1119,7 +1095,7 @@
     }
     // 课次筛选：选了具体来源后才出现（"全部"时内置与教材课号会重号，先选来源更清晰）
     if (!hasBooks || st.src !== "") {
-      // chips-scroll：课次可能有 20+ 个，窄屏收成一行横向滚动，别把卡片挤到屏幕外
+      // chips-scroll：课次可能有 20+ 个，收成一行横向滚动，别把卡片挤到屏幕外
       h += '<div class="chips chips-scroll">课次：<button class="chip' + (st.lesson === 0 ? " on" : "") + '" data-vl="0">全部</button>';
       const lessons = [];
       VOCAB[st.lv].forEach(function (v) {
@@ -1135,16 +1111,53 @@
     } else {
       h += '<div class="tip2">本级别含<b>教材生词</b>：先在上方「来源」选一册教材，即可按课次逐课练习。</div>';
     }
+    // 注音 / 自动播放（低频开关）
+    h += '<div class="chips">';
+    h += '<button class="chip' + (kanaOn ? " on" : "") + '" data-ckana="' + (kanaOn ? "0" : "1") + '" title="关闭后正面只显示汉字，强制自己回忆读音">注音：' + (kanaOn ? "开" : "关") + '</button>';
+    if (cMode === "listen" || cMode === "choice" || cMode === "auto") {
+      const ap = S.settings.autoPlay !== false;
+      h += '<button class="chip' + (ap ? " on" : "") + '" data-cautoplay="' + (ap ? "0" : "1") + '" title="听音 / 听选模式下进入卡片时自动播放发音">自动播放：' + (ap ? "开" : "关") + '</button>';
+    }
+    h += '</div>';
+    if (isReview && rm !== "due") {
+      h += '<div class="tip2">'
+        + (rm === "wrong"
+          ? '🎯 <b>只练错词</b>：这些都是你答错过的词，答对会移出错词本。配合上方<b>级别 / 来源 / 课次</b>可以精准补弱。'
+          : '🗂️ <b>全部已学</b>：不看到期时间，随时想复习就复习。顺序按「最久没复习」排。评分照常更新下次复习时间。')
+        + '</div>';
+    }
+    h += '<div class="tip2">'
+      + '🧭 <b>一律「出题作答 + 自动判分」</b>，不用点四档自评 —— 自评会受「看了答案才觉得本来就会」影响。'
+      + '作答方式随熟练度切：<b>复习 4 次以内 → 四选一</b>（门槛低），<b>之后 → 动手输入</b>'
+      + '（四选一是再认、比回忆容易，一直用会把间隔撑得太长）。'
+      + (cMode === "auto"
+        ? '<br>🪜 <b>自动进阶</b>：新词先「看词想义」立形义联系 → 3 次「听音选答」练听解 → 4–5 次「听音辨义」→ 6 次起「看义想词」练产出。'
+          + '卡片信息栏会标出当前练法与作答方式，想固定用某一种就在上面切换。'
+        : cMode === "choice" ? '<br>🎯 <b>听音选答</b>：放发音 → 先选出是哪个词 → 再选出它的中文意思。熟练后改为听音写词。'
+          : cMode === "listen" ? '<br>🎧 <b>听音辨义</b>：只放发音 → 从 4 个中文释义里选出它的意思。熟练后改为听音写词。按 <kbd>S</kbd> 或点 🔊 重听。'
+            : cMode === "mean" ? '<br>✍️ <b>看义想词</b>：给中文 → 从 4 个词里选出对应的日文。熟练后改为手写这个词。'
+              : '<br>👁️ <b>看词想义</b>：给词形 → 从 4 个中文释义里选出它的意思。熟练后改为手写读音。')
+      + (kanaOn ? '' : '　注音已关闭：正面只给汉字，读音要自己回忆。')
+      + '</div>';
+    h += '</div></details>';
+
+    // —— 统计条：一行放完（原来两个 rowbox 分两处）——
     const quotaLeft = Math.max(0, S.settings.newPerDay - S.today.new);
-    h += '<div class="rowbox">'
+    h += '<div class="statbar">'
+      + '<span>可练：<b>' + cnt + '</b></span>'
       + (isReview
         ? '<span>今日已复习：<b>' + S.today.rev + '</b></span>'
           + (rm === "due" ? '<span>到期待复习：<b>' + mc.due + '</b></span>'
             : rm === "wrong" ? '<span>错词：<b>' + mc.wrong + '</b></span>'
               : '<span>已学可练：<b>' + mc.all + '</b></span>')
-        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span><span>今日额度剩余：<b>' + quotaLeft + '</b></span><span>未学词：<b>' + mc["new"] + '</b></span>')
+        : '<span>今日新学：<b>' + S.today.new + '</b>/' + S.settings.newPerDay + '</span>'
+          + '<span>额度剩余：<b>' + quotaLeft + '</b></span>'
+          + '<span>未学词：<b>' + mc["new"] + '</b></span>')
       + (mc.learn ? '<span title="还没走完学习步的词（答错或刚学）">巩固中：<b>' + mc.learn + '</b></span>' : '')
-      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span><button class="btn sm" id="vbuild">重抽本轮</button></div>';
+      + '<span>本轮剩余：<b>' + Math.max(0, st.queue.length - st.idx) + '</b></span>'
+      + '<button class="btn sm ghost" id="vbuild">重抽本轮</button>'
+      + '<button class="btn sm grow" data-go="' + (isReview ? 'learn' : 'review') + '">去' + (isReview ? '学新词' : '复习') + '</button>'
+      + '</div>';
     h += queueNote(st, mc, quotaLeft);
     h += '<div id="vcard" class="card"></div>';
     return h;
@@ -2317,7 +2330,7 @@
     if (trn.dir === "j2c") {
       h += '<div class="qtitle jp">' + esc(v.w || v.k) + '</div>';
       h += '<div class="qask"><span class="rt">' + esc(v.k) + '</span>　' + esc(v.p || "") + '</div>';
-      h += '<div class="opts">';
+      h += '<div class="opts opts-eq">';
       trn.opts.forEach(function (o, i) {
         let cls = "opt";
         if (trn.picked >= 0) {

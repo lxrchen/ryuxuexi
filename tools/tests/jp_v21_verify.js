@@ -141,7 +141,9 @@ console.log("\n[4] 复习页 UI：三档选词 + 计数 + 级别已学数");
 {
   rs.rmode = "due"; J.buildQueue(false);
   let h = J.viewReview();
-  t("有「选词」行", h.indexOf("选词：") >= 0);
+  // 改版后「选词」成了工具栏里的分组标签（不再带全角冒号）→ 同时确认三档按钮都在
+t("有「选词」行", h.indexOf(">选词<") >= 0 && h.indexOf('data-rvmode="due"') >= 0
+    && h.indexOf('data-rvmode="all"') >= 0 && h.indexOf('data-rvmode="wrong"') >= 0);
   t("三档按钮齐全", h.indexOf('data-rvmode="due"') >= 0 && h.indexOf('data-rvmode="all"') >= 0 && h.indexOf('data-rvmode="wrong"') >= 0);
   t("「到期待复习」标出 5", /data-rvmode="due"[^>]*>到期待复习（5）/.test(h), (h.match(/data-rvmode="due"[^>]*>[^<]*/) || [])[0]);
   t("「全部已学」标出 20", /data-rvmode="all"[^>]*>全部已学（20）/.test(h), (h.match(/data-rvmode="all"[^>]*>[^<]*/) || [])[0]);
@@ -244,7 +246,7 @@ console.log("\n[8] 不破坏原有行为");
   // 学习页不应出现选词行
   J.setStateFor("learn");
   const hl = J.viewLearn();
-  t("学习页没有「选词」行", hl.indexOf("选词：") < 0 && hl.indexOf("data-rvmode") < 0);
+  t("学习页没有「选词」行", hl.indexOf(">选词<") < 0 && hl.indexOf("data-rvmode") < 0);
   t("学习页级别仍显示总量+教材数", /N5（\d+/.test(hl), (hl.match(/N5（[^）]*）/) || [])[0]);
 
   // 复习默认模式仍是 due

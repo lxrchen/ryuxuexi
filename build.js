@@ -10,7 +10,12 @@ const ROOT = __dirname;
 const DIST = path.join(ROOT, "dist");   // 仓库内，Netlify publish = 日语学习站/dist
 const OUT_NAME = "日语学习站_单文件版.html";
 
-const css = fs.readFileSync(path.join(ROOT, "css/style.css"), "utf8");
+const cssBase = fs.readFileSync(path.join(ROOT, "css/style.css"), "utf8");
+// 设计系统覆盖层（改版试验）。**删掉这个文件即可完全回退到原样式**。
+const REDESIGN = path.join(ROOT, "css", "redesign.css");
+const css = fs.existsSync(REDESIGN)
+  ? cssBase + "\n" + fs.readFileSync(REDESIGN, "utf8")
+  : cssBase;
 const files = [
   "js/data/kana.js",
   "js/data/vocab-n5.js",
@@ -79,18 +84,21 @@ ${css}
   <nav class="nav">
     <a href="#/home">首页</a>
     <a href="#/kana">五十音</a>
+    <i class="nsep"></i>
     <a href="#/learn">学新词</a>
     <a href="#/review">复习</a>
-    <a href="#/grammar">语法库</a>
     <a href="#/drill">变形训练</a>
     <a href="#/dict">听写</a>
     <a href="#/trans">翻译</a>
+    <i class="nsep"></i>
+    <a href="#/grammar">语法库</a>
     <a href="#/read">文章精读</a>
     <a href="#/textbook">教材大纲</a>
-    <a href="#/dash">仪表盘</a>
+    <i class="nsep"></i>
     <a href="#/studied">已学词</a>
     <a href="#/wrong">错词本</a>
     <a href="#/custom">我的词库</a>
+    <a href="#/dash">仪表盘</a>
   </nav>
 </header>
 <main id="app"></main>
