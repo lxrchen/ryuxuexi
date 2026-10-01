@@ -1,5 +1,7 @@
 # 日语学习站 · 零基础 → N2 → N1
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/25e1ebd1-d3a3-46b3-9c5b-f027369874b7/deploy-status?branch=main)](https://app.netlify.com/projects/ryuxuexi/deploys)
+
 一个**纯静态、离线可用**、无需注册登录的日语自学 Web App。基于《新版中日交流标准日本语》体系，覆盖 N5 到 N1 五个等级，内置间隔重复记忆（SRS）、动词变形训练、真人发音与学习仪表盘。
 
 - 🌐 **在线地址**：https://ryuxuexi.netlify.app
